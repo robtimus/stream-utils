@@ -17,6 +17,7 @@
 
 package com.github.robtimus.stream;
 
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -27,6 +28,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collector;
 import java.util.stream.Collector.Characteristics;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -91,7 +93,7 @@ public final class AdditionalCollectors {
     }
 
     /**
-     * Returns a {@link Collector} that results the single element of a stream, or {@link Optional#empty()} if the stream is empty.
+     * Returns a {@link Collector} that finds the single element of a stream, or {@link Optional#empty()} if the stream is empty.
      * <p>
      * If the stream contains {@code null} values, the returned {@link Collector} will throw a {@link NullPointerException}.
      * If the stream contains more than one element, the returned {@link Collector} will throw an {@link IllegalStateException}.
@@ -104,7 +106,7 @@ public final class AdditionalCollectors {
     }
 
     /**
-     * Returns a {@link Collector} that results the single element of a stream, or {@link Optional#empty()} if the stream is empty.
+     * Returns a {@link Collector} that finds the single element of a stream, or {@link Optional#empty()} if the stream is empty.
      * <p>
      * If the stream contains {@code null} values, the returned {@link Collector} will throw a {@link NullPointerException}.
      * If the stream contains more than one element, the returned {@link Collector} will throw an exception provided by the given {@link Supplier}.
@@ -139,6 +141,63 @@ public final class AdditionalCollectors {
         }
 
         return Collector.of(SingleValueCollector::new, SingleValueCollector::accumulate, SingleValueCollector::combine, SingleValueCollector::finish);
+    }
+
+    /**
+     * Returns a {@link Collector} that accumulates elements into a {@link Map}.
+     * This method is like {@link Collectors#toMap(Function, Function)} but with a custom map factory.
+     * It's a convenient alternative to using {@link Collectors#toMap(Function, Function, BinaryOperator, Supplier)} without having to write the
+     * merge function. Like {@link Collectors#toMap(Function, Function)}, the value mapping function cannot return {@code null} values.
+     *
+     * @param <T> The type of input element.
+     * @param <K> The output type of the key mapping function.
+     * @param <V> The output type of the value mapping function.
+     * @param <M> The type of resulting {@link Map}.
+     * @param keyMapper A mapping function to produce map keys.
+     * @param valueMapper A mapping function to produce map values.
+     * @param mapFactory A supplier providing a new empty {@link Map} into which the results will be inserted.
+     * @return A {@link Collector} that accumulates elements into a {@link Map}.
+     */
+    public static <T, K, V, M extends Map<K, V>> Collector<T, ?, M> toMapWithSupplier(Function<? super T, ? extends K> keyMapper,
+                                                                                      Function<? super T, ? extends V> valueMapper,
+                                                                                      Supplier<M> mapFactory) {
+
+        Objects.requireNonNull(keyMapper);
+        Objects.requireNonNull(valueMapper);
+        Objects.requireNonNull(mapFactory);
+
+        final class MapCollector {
+            private final M map = mapFactory.get();
+
+            private void accumulate(T element) {
+                K key = keyMapper.apply(element);
+                V value = valueMapper.apply(element);
+                if (value == null) {
+                    throw new NullPointerException(Messages.AdditionalCollectors.toMap.nullValue.get(element));
+                }
+                add(key, value);
+            }
+
+            private void add(K key, V value) {
+                V existing = map.putIfAbsent(key, value);
+                if (existing != null) {
+                    throw new IllegalStateException(Messages.AdditionalCollectors.toMap.duplicateKey.get(key));
+                }
+            }
+
+            private MapCollector combine(MapCollector other) {
+                for (Map.Entry<K, V> entry : other.map.entrySet()) {
+                    add(entry.getKey(), entry.getValue());
+                }
+                return this;
+            }
+
+            private M finish() {
+                return map;
+            }
+        }
+
+        return Collector.of(MapCollector::new, MapCollector::accumulate, MapCollector::combine, MapCollector::finish);
     }
 
     /**

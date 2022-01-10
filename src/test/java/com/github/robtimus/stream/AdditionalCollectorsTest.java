@@ -22,8 +22,11 @@ import static com.github.robtimus.stream.AdditionalCollectors.filtering;
 import static com.github.robtimus.stream.AdditionalCollectors.findSingle;
 import static com.github.robtimus.stream.AdditionalCollectors.partitioning;
 import static com.github.robtimus.stream.AdditionalCollectors.sequentialOnly;
+import static com.github.robtimus.stream.AdditionalCollectors.toMapWithSupplier;
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toList;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -31,15 +34,21 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BinaryOperator;
+import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
+import java.util.regex.Pattern;
 import java.util.stream.Collector;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -253,6 +262,142 @@ class AdditionalCollectorsTest {
         @DisplayName("with null exception supplier")
         void testNullExceptionSupplier() {
             assertThrows(NullPointerException.class, () -> findSingle(null));
+        }
+    }
+
+    @Nested
+    @DisplayName("toMapWithSupplier")
+    class ToMapWithSupplier {
+
+        @Nested
+        @DisplayName("no duplicates")
+        class NoDuplicates {
+
+            @Test
+            @DisplayName("collect")
+            void testCollect() {
+                Map<Integer, String> result = IntStream.range(0, 20)
+                        .mapToObj(i -> i)
+                        .collect(toMapWithSupplier(Function.identity(), Object::toString, TreeMap::new));
+
+                Map<Integer, String> expected = new HashMap<>();
+                for (int i = 0; i < 20; i++) {
+                    expected.put(i, Integer.toString(i));
+                }
+
+                assertEquals(expected, result);
+                assertInstanceOf(TreeMap.class, result);
+            }
+
+            @Test
+            @DisplayName("collect parallel")
+            void testCollectParallel() {
+                Map<Integer, String> result = IntStream.range(0, 20)
+                        .parallel()
+                        .mapToObj(i -> i)
+                        .collect(toMapWithSupplier(Function.identity(), Object::toString, TreeMap::new));
+
+                Map<Integer, String> expected = new HashMap<>();
+                for (int i = 0; i < 20; i++) {
+                    expected.put(i, Integer.toString(i));
+                }
+
+                assertEquals(expected, result);
+                assertInstanceOf(TreeMap.class, result);
+            }
+        }
+
+        @Nested
+        @DisplayName("duplicates")
+        class Duplicates {
+
+            @Test
+            @DisplayName("collect")
+            void testCollect() {
+                Stream<Integer> stream = IntStream.range(0, 20)
+                        .mapToObj(i -> i);
+                Collector<Integer, ?, ?> collector = toMapWithSupplier(i -> i % 10, Object::toString, TreeMap::new);
+                IllegalStateException exception = assertThrows(IllegalStateException.class, () -> stream.collect(collector));
+
+                String messagePattern = Messages.AdditionalCollectors.toMap.duplicateKey.get(0).replace("0", "\\d+");
+                assertThat(exception.getMessage(), matchesPattern(messagePattern));
+            }
+
+            @Test
+            @DisplayName("collect parallel")
+            void testCollectParallel() {
+                Stream<Integer> stream = IntStream.range(0, 20)
+                        .parallel()
+                        .mapToObj(i -> i);
+                Collector<Integer, ?, ?> collector = toMapWithSupplier(i -> i % 10, Object::toString, TreeMap::new);
+                IllegalStateException exception = assertThrows(IllegalStateException.class, () -> stream.collect(collector));
+
+                String messagePattern = Messages.AdditionalCollectors.toMap.duplicateKey.get(0).replace("0", "\\d+");
+                // ForkJoinTask may wrap the IllegalStateException in another IllegalStateException
+                // Add an optional IllegalStateException before the message
+                messagePattern = "(" + Pattern.quote(IllegalStateException.class.getName()) + ": )?" + messagePattern;
+                assertThat(exception.getMessage(), matchesPattern(messagePattern));
+            }
+        }
+
+        @Nested
+        @DisplayName("null values")
+        class NullValues {
+
+            @Test
+            @DisplayName("collect")
+            void testCollect() {
+                Stream<Integer> stream = IntStream.range(0, 20)
+                        .mapToObj(i -> i);
+                Collector<Integer, ?, ?> collector = toMapWithSupplier(i -> i % 10, i -> i == 10 ? null : i.toString(), TreeMap::new);
+                NullPointerException exception = assertThrows(NullPointerException.class, () -> stream.collect(collector));
+
+                String messagePattern = Messages.AdditionalCollectors.toMap.nullValue.get(0).replace("0", "\\d+");
+                assertThat(exception.getMessage(), matchesPattern(messagePattern));
+            }
+
+            @Test
+            @DisplayName("collect parallel")
+            void testCollectParallel() {
+                Stream<Integer> stream = IntStream.range(0, 20)
+                        .parallel()
+                        .mapToObj(i -> i);
+                Collector<Integer, ?, ?> collector = toMapWithSupplier(i -> i % 10, i -> i == 10 ? null : i.toString(), TreeMap::new);
+                NullPointerException exception = assertThrows(NullPointerException.class, () -> stream.collect(collector));
+
+                // ForkJoinTask may wrap the NullPointerException in another NullPointerException
+                // Add an optional NullPointerException before the message
+                if (exception.getCause() instanceof NullPointerException) {
+                    exception = (NullPointerException) exception.getCause();
+                }
+
+                String messagePattern = Messages.AdditionalCollectors.toMap.nullValue.get(0).replace("0", "\\d+");
+                assertThat(exception.getMessage(), matchesPattern(messagePattern));
+            }
+        }
+
+        @Test
+        @DisplayName("with null key mapper")
+        void testNullKeyMapper() {
+            Function<Integer, Integer> valueMapper = Function.identity();
+            Supplier<Map<Integer, Integer>> mapSupplier = HashMap::new;
+            assertThrows(NullPointerException.class, () -> toMapWithSupplier(null, valueMapper, mapSupplier));
+        }
+
+        @Test
+        @DisplayName("with null value mapper")
+        void testNullValueMapper() {
+            Function<Integer, Integer> keyMapper = Function.identity();
+            Supplier<Map<Integer, Integer>> mapSupplier = HashMap::new;
+            assertThrows(NullPointerException.class, () -> toMapWithSupplier(keyMapper, null, mapSupplier));
+        }
+
+        @Test
+        @DisplayName("with null map supplier")
+        void testNullMapSupplier() {
+            Function<Integer, Integer> keyMapper = Function.identity();
+            Function<Integer, Integer> valueMapper = Function.identity();
+            assertThrows(NullPointerException.class, () -> toMapWithSupplier(keyMapper, valueMapper, null));
         }
     }
 
