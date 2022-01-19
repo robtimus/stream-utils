@@ -36,6 +36,8 @@ public final class StreamUtils {
 
     /**
      * Reduces elements of a stream in partitions of a specific size, then runs an action for each reduction result.
+     * This method can be described as "for every <em>count</em> elements of <em>stream</em>, collect using <em>collector</em>, then run
+     * <em>action</em> on the collector's result".
      * <p>
      * Note: this method does not support concurrent streams.
      *

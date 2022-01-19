@@ -95,8 +95,8 @@ public final class AdditionalCollectors {
     /**
      * Returns a {@link Collector} that finds the single element of a stream, or {@link Optional#empty()} if the stream is empty.
      * <p>
-     * If the stream contains {@code null} values, the returned {@link Collector} will throw a {@link NullPointerException}.
      * If the stream contains more than one element, the returned {@link Collector} will throw an {@link IllegalStateException}.
+     * If the stream contains {@code null} values, the returned {@link Collector} will throw a {@link NullPointerException}.
      *
      * @param <T> The type of input element.
      * @return A {@link Collector} that results the single element of a stream
@@ -108,8 +108,8 @@ public final class AdditionalCollectors {
     /**
      * Returns a {@link Collector} that finds the single element of a stream, or {@link Optional#empty()} if the stream is empty.
      * <p>
-     * If the stream contains {@code null} values, the returned {@link Collector} will throw a {@link NullPointerException}.
      * If the stream contains more than one element, the returned {@link Collector} will throw an exception provided by the given {@link Supplier}.
+     * If the stream contains {@code null} values, the returned {@link Collector} will throw a {@link NullPointerException}.
      *
      * @param <T> The type of input element.
      * @param exceptionSupplier A {@link Supplier} for the exception to throw if more than one element is encountered.
@@ -166,38 +166,37 @@ public final class AdditionalCollectors {
         Objects.requireNonNull(valueMapper);
         Objects.requireNonNull(mapFactory);
 
-        final class MapCollector {
-            private final M map = mapFactory.get();
+        return Collector.of(
+                mapFactory,
+                (m, e) -> addToMap(m, e, keyMapper, valueMapper),
+                AdditionalCollectors::combineMaps
+        );
+    }
 
-            private void accumulate(T element) {
-                K key = keyMapper.apply(element);
-                V value = valueMapper.apply(element);
-                if (value == null) {
-                    throw new NullPointerException(Messages.AdditionalCollectors.toMap.nullValue.get(element));
-                }
-                add(key, value);
-            }
+    private static <T, K, V> void addToMap(Map<K, V> map, T element,
+                                           Function<? super T, ? extends K> keyMapper,
+                                           Function<? super T, ? extends V> valueMapper) {
 
-            private void add(K key, V value) {
-                V existing = map.putIfAbsent(key, value);
-                if (existing != null) {
-                    throw new IllegalStateException(Messages.AdditionalCollectors.toMap.duplicateKey.get(key));
-                }
-            }
-
-            private MapCollector combine(MapCollector other) {
-                for (Map.Entry<K, V> entry : other.map.entrySet()) {
-                    add(entry.getKey(), entry.getValue());
-                }
-                return this;
-            }
-
-            private M finish() {
-                return map;
-            }
+        K key = keyMapper.apply(element);
+        V value = valueMapper.apply(element);
+        if (value == null) {
+            throw new NullPointerException(Messages.AdditionalCollectors.toMap.nullValue.get(element));
         }
+        addToMap(map, key, value);
+    }
 
-        return Collector.of(MapCollector::new, MapCollector::accumulate, MapCollector::combine, MapCollector::finish);
+    private static <K, V> void addToMap(Map<K, V> map, K key, V value) {
+        V existing = map.putIfAbsent(key, value);
+        if (existing != null) {
+            throw new IllegalStateException(Messages.AdditionalCollectors.toMap.duplicateKey.get(key));
+        }
+    }
+
+    private static <K, V, M extends Map<K, V>> M combineMaps(M map1, M map2) {
+        for (Map.Entry<K, V> entry : map2.entrySet()) {
+            addToMap(map1, entry.getKey(), entry.getValue());
+        }
+        return map1;
     }
 
     /**
@@ -253,34 +252,22 @@ public final class AdditionalCollectors {
         Objects.requireNonNull(collector);
 
         final class CompletableFutureCollector {
-            private final BiConsumer<A, T> accumulator;
-            private final BinaryOperator<A> combiner;
-            private final Function<A, R> finisher;
-
-            private CompletableFuture<A> result;
-
-            private CompletableFutureCollector() {
-                this.accumulator = collector.accumulator();
-                this.combiner = collector.combiner();
-                this.finisher = collector.finisher();
-
-                result = CompletableFuture.completedFuture(collector.supplier().get());
-            }
+            private CompletableFuture<A> result = CompletableFuture.completedFuture(collector.supplier().get());
 
             private void accumulate(CompletableFuture<T> future) {
                 result = result.thenCombine(future, (a, t) -> {
-                    accumulator.accept(a, t);
+                    collector.accumulator().accept(a, t);
                     return a;
                 });
             }
 
             private CompletableFutureCollector combine(CompletableFutureCollector other) {
-                result = result.thenCombine(other.result, combiner::apply);
+                result = result.thenCombine(other.result, collector.combiner()::apply);
                 return this;
             }
 
             private CompletableFuture<R> finish() {
-                return result.thenApply(finisher);
+                return result.thenApply(collector.finisher());
             }
         }
 

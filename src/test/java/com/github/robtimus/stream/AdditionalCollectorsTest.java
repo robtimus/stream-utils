@@ -172,6 +172,15 @@ class AdditionalCollectorsTest {
         }
 
         @Test
+        @DisplayName("stream with null elements")
+        void testNullElements() {
+            Stream<Integer> stream = Stream.of((Integer) null);
+            Collector<Integer, ?, Optional<Integer>> collector = findSingle();
+
+            assertThrows(NullPointerException.class, () -> stream.collect(collector));
+        }
+
+        @Test
         @DisplayName("stream with multiple elements")
         void testMultipleElements() {
             Stream<Integer> stream = IntStream.range(0, 10)
