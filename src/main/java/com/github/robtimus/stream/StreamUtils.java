@@ -57,6 +57,7 @@ public final class StreamUtils {
         Objects.requireNonNull(action);
 
         // Use a Collector, even though we're not actually collecting anything
+        // The intermediate object (a) is ignored, and can therefore be null
         Collector<R, ?, ?> partitioner = sequentialOnly(() -> null, (a, t) -> action.accept(t));
         Object result = stream.collect(partitioning(count, collector, partitioner));
         assert result == null;
