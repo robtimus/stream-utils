@@ -119,24 +119,80 @@ public final class AdditionalCollectors {
         Objects.requireNonNull(exceptionSupplier);
 
         final class SingleValueCollector {
-            private Optional<T> result = Optional.empty();
+            private T result = null;
 
             private void accumulate(T element) {
-                result.ifPresent(t -> {
+                Objects.requireNonNull(element);
+                if (result != null) {
                     throw exceptionSupplier.get();
-                });
-                result = Optional.of(element);
+                }
+                result = element;
             }
 
             private SingleValueCollector combine(SingleValueCollector other) {
-                if (result.isPresent() && other.result.isPresent()) {
+                if (result != null && other.result != null) {
                     throw exceptionSupplier.get();
                 }
-                return result.isPresent() ? this : other;
+                return result != null ? this : other;
             }
 
             private Optional<T> finish() {
-                return result;
+                return Optional.ofNullable(result);
+            }
+        }
+
+        return Collector.of(SingleValueCollector::new, SingleValueCollector::accumulate, SingleValueCollector::combine, SingleValueCollector::finish);
+    }
+
+    /**
+     * Returns a {@link Collector} that finds a unique element of a stream, or {@link Optional#empty()} if the stream is empty.
+     * Uniqueness is determined using {@link Object#equals(Object)}.
+     * <p>
+     * If the stream contains more than one different element, the returned {@link Collector} will throw an {@link IllegalStateException}.
+     * If the stream contains {@code null} values, the returned {@link Collector} will throw a {@link NullPointerException}.
+     *
+     * @param <T> The type of input element.
+     * @return A {@link Collector} that results the unique element of a stream
+     */
+    public static <T> Collector<T, ?, Optional<T>> findUnique() {
+        return findUnique(() -> new IllegalStateException(Messages.AdditionalCollectors.multipleElements.get()));
+    }
+
+    /**
+     * Returns a {@link Collector} that finds the unique element of a stream, or {@link Optional#empty()} if the stream is empty.
+     * Uniqueness is determined using {@link Object#equals(Object)}.
+     * <p>
+     * If the stream contains more than one different element, the returned {@link Collector} will throw an exception provided by the given
+     * {@link Supplier}. If the stream contains {@code null} values, the returned {@link Collector} will throw a {@link NullPointerException}.
+     *
+     * @param <T> The type of input element.
+     * @param exceptionSupplier A {@link Supplier} for the exception to throw if more than one element is encountered.
+     * @return A {@link Collector} that results the unique element of a stream
+     */
+    public static <T> Collector<T, ?, Optional<T>> findUnique(Supplier<? extends RuntimeException> exceptionSupplier) {
+        Objects.requireNonNull(exceptionSupplier);
+
+        final class SingleValueCollector {
+            private T result = null;
+
+            private void accumulate(T element) {
+                Objects.requireNonNull(element);
+                if (result == null) {
+                    result = element;
+                } else if (!result.equals(element)) {
+                    throw exceptionSupplier.get();
+                }
+            }
+
+            private SingleValueCollector combine(SingleValueCollector other) {
+                if (result != null && other.result != null && !result.equals(other.result)) {
+                    throw exceptionSupplier.get();
+                }
+                return result != null ? this : other;
+            }
+
+            private Optional<T> finish() {
+                return Optional.ofNullable(result);
             }
         }
 

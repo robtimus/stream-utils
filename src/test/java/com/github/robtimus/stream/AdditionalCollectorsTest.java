@@ -20,6 +20,7 @@ package com.github.robtimus.stream;
 import static com.github.robtimus.stream.AdditionalCollectors.completableFutures;
 import static com.github.robtimus.stream.AdditionalCollectors.filtering;
 import static com.github.robtimus.stream.AdditionalCollectors.findSingle;
+import static com.github.robtimus.stream.AdditionalCollectors.findUnique;
 import static com.github.robtimus.stream.AdditionalCollectors.partitioning;
 import static com.github.robtimus.stream.AdditionalCollectors.sequentialOnly;
 import static com.github.robtimus.stream.AdditionalCollectors.toMapWithSupplier;
@@ -172,6 +173,18 @@ class AdditionalCollectorsTest {
         }
 
         @Test
+        @DisplayName("stream with equal elements")
+        void testEqualElements() {
+            Stream<Integer> stream = IntStream.range(0, 10)
+                    .map(i -> 0)
+                    .boxed();
+            Collector<Integer, ?, Optional<Integer>> collector = findSingle();
+
+            IllegalStateException exception = assertThrows(IllegalStateException.class, () -> stream.collect(collector));
+            assertEquals(Messages.AdditionalCollectors.multipleElements.get(), exception.getMessage());
+        }
+
+        @Test
         @DisplayName("stream with null elements")
         void testNullElements() {
             Stream<Integer> stream = Stream.of((Integer) null);
@@ -258,7 +271,7 @@ class AdditionalCollectorsTest {
                 A intermediate2 = collector.supplier().get();
 
                 collector.accumulator().accept(intermediate1, 1);
-                collector.accumulator().accept(intermediate2, 2);
+                collector.accumulator().accept(intermediate2, 1);
 
                 BinaryOperator<A> combiner = collector.combiner();
 
@@ -271,6 +284,160 @@ class AdditionalCollectorsTest {
         @DisplayName("with null exception supplier")
         void testNullExceptionSupplier() {
             assertThrows(NullPointerException.class, () -> findSingle(null));
+        }
+    }
+
+    @Nested
+    @DisplayName("findUnique")
+    class FindUnique {
+
+        @Test
+        @DisplayName("empty stream")
+        void testEmptyStream() {
+            Stream<Integer> stream = Stream.empty();
+            Optional<Integer> result = stream.collect(findUnique());
+            assertEquals(Optional.empty(), result);
+        }
+
+        @Test
+        @DisplayName("stream with single element")
+        void testSingleElement() {
+            Optional<Integer> result = IntStream.range(0, 10)
+                    .boxed()
+                    .filter(i -> i == 0)
+                    .collect(findUnique());
+            assertEquals(Optional.of(0), result);
+        }
+
+        @Test
+        @DisplayName("stream with equal elements")
+        void testEqualElements() {
+            Optional<Integer> result = IntStream.range(0, 10)
+                    .map(i -> 0)
+                    .boxed()
+                    .collect(findUnique());
+            assertEquals(Optional.of(0), result);
+        }
+
+        @Test
+        @DisplayName("stream with null elements")
+        void testNullElements() {
+            Stream<Integer> stream = Stream.of((Integer) null);
+            Collector<Integer, ?, Optional<Integer>> collector = findUnique();
+
+            assertThrows(NullPointerException.class, () -> stream.collect(collector));
+        }
+
+        @Test
+        @DisplayName("stream with multiple elements")
+        void testMultipleElements() {
+            Stream<Integer> stream = IntStream.range(0, 10)
+                    .boxed();
+            Collector<Integer, ?, Optional<Integer>> collector = findUnique();
+
+            IllegalStateException exception = assertThrows(IllegalStateException.class, () -> stream.collect(collector));
+            assertEquals(Messages.AdditionalCollectors.multipleElements.get(), exception.getMessage());
+        }
+
+        @Nested
+        @DisplayName("combine")
+        class Combine {
+
+            @Test
+            @DisplayName("empty intermediates")
+            void testCombineEmptyIntermediates() {
+                testCombineEmptyIntermediates(findUnique());
+            }
+
+            private <A> void testCombineEmptyIntermediates(Collector<Integer, A, Optional<Integer>> collector) {
+                A intermediate1 = collector.supplier().get();
+                A intermediate2 = collector.supplier().get();
+
+                A combined = collector.combiner().apply(intermediate1, intermediate2);
+
+                Optional<Integer> result = collector.finisher().apply(combined);
+                assertEquals(Optional.empty(), result);
+            }
+
+            @Test
+            @DisplayName("non-empty intermediate with empty intermediate")
+            void testCombineNonEmptyIntermediateWithEmptyIntermediate() {
+                testCombineNonEmptyIntermediateWithEmptyIntermediate(findUnique());
+            }
+
+            private <A> void testCombineNonEmptyIntermediateWithEmptyIntermediate(Collector<Integer, A, Optional<Integer>> collector) {
+                A intermediate1 = collector.supplier().get();
+                A intermediate2 = collector.supplier().get();
+
+                collector.accumulator().accept(intermediate1, 1);
+
+                A combined = collector.combiner().apply(intermediate1, intermediate2);
+
+                Optional<Integer> result = collector.finisher().apply(combined);
+                assertEquals(Optional.of(1), result);
+            }
+
+            @Test
+            @DisplayName("empty intermediate with non-empty intermediate")
+            void testCombineEmptyIntermediateWithNonEmptyIntermediate() {
+                testCombineEmptyIntermediateWithNonEmptyIntermediate(findUnique());
+            }
+
+            private <A> void testCombineEmptyIntermediateWithNonEmptyIntermediate(Collector<Integer, A, Optional<Integer>> collector) {
+                A intermediate1 = collector.supplier().get();
+                A intermediate2 = collector.supplier().get();
+
+                collector.accumulator().accept(intermediate2, 2);
+
+                A combined = collector.combiner().apply(intermediate1, intermediate2);
+
+                Optional<Integer> result = collector.finisher().apply(combined);
+                assertEquals(Optional.of(2), result);
+            }
+
+            @Test
+            @DisplayName("non-empty intermediates with equal elements")
+            void testCombineNonEmptyIntermediatesWithEqualElements() {
+                testCombineNonEmptyIntermediatesWithEqualElements(findUnique());
+            }
+
+            private <A> void testCombineNonEmptyIntermediatesWithEqualElements(Collector<Integer, A, Optional<Integer>> collector) {
+                A intermediate1 = collector.supplier().get();
+                A intermediate2 = collector.supplier().get();
+
+                collector.accumulator().accept(intermediate1, 1);
+                collector.accumulator().accept(intermediate2, 1);
+
+                A combined = collector.combiner().apply(intermediate1, intermediate2);
+
+                Optional<Integer> result = collector.finisher().apply(combined);
+                assertEquals(Optional.of(1), result);
+            }
+
+            @Test
+            @DisplayName("non-empty intermediates with different elements")
+            void testCombineNonEmptyIntermediatesWithDifferentElements() {
+                testCombineNonEmptyIntermediatesWithDifferentElements(findUnique());
+            }
+
+            private <A> void testCombineNonEmptyIntermediatesWithDifferentElements(Collector<Integer, A, Optional<Integer>> collector) {
+                A intermediate1 = collector.supplier().get();
+                A intermediate2 = collector.supplier().get();
+
+                collector.accumulator().accept(intermediate1, 1);
+                collector.accumulator().accept(intermediate2, 2);
+
+                BinaryOperator<A> combiner = collector.combiner();
+
+                IllegalStateException exception = assertThrows(IllegalStateException.class, () -> combiner.apply(intermediate1, intermediate2));
+                assertEquals(Messages.AdditionalCollectors.multipleElements.get(), exception.getMessage());
+            }
+        }
+
+        @Test
+        @DisplayName("with null exception supplier")
+        void testNullExceptionSupplier() {
+            assertThrows(NullPointerException.class, () -> findUnique(null));
         }
     }
 

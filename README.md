@@ -9,8 +9,10 @@ Class [AdditionalCollectors](https://robtimus.github.io/stream-utils/apidocs/com
 ### sequentialOnly
 `sequentialOnly` is a collector factory method similar to `Collector.of`, but without the combiner. This can be used for collectors that cannot easily be combined, in cases where only sequential streams are used.
 
-### findSingle
+### findSingle and findUnique
 `findSingle` is like `Stream.findAny`, but it throws an exception if the stream contains more than one element. It can be combined with `Optional.orElseThrow` to find exactly one element.
+
+`findUnique` is like `findSingle` that allows multiple occurrences of the same element.
 
 ### toMapWithSupplier
 `toMapWithSupplier` is like `Collectors.toMap`. However, unlike the version with only a key and value mapper, it allows you to provide a `Map` supplier. Unlike the version with a supplier there is no need to provide a merge function.
