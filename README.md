@@ -38,3 +38,38 @@ Class [StreamUtils](https://robtimus.github.io/stream-utils/apidocs/com/github/r
     forEvery(10, stream, joining(", "), System.out::println);
 
 Like `AdditionalCollectors.partitioning`, this method will throw an exception when used to collect parallel streams.
+
+## FutureValue
+
+Class [FutureValue](https://robtimus.github.io/stream-utils/apidocs/com/github/robtimus/stream/FutureValue.html) provides utility methods to work with `CompletableFuture` in streams. Unlike `AdditionalCollectors.completableFutures`, methods in this class can be used to provide intermediate filtering and mapping. It also provides support for `Stream.reduce` and `Stream.forEach` for `CompletableFuture`.
+
+To use this class, use `Stream.map` in combination with `FutureValue.wrap`. Then `FutureValue.filter` and `FutureValue.map` can be used any number of times before `Stream.reduce`, `Stream.collect` or `Stream.forEach` is called.
+
+Some examples:
+
+    // assume stream is an existing Stream<CompletableFuture<Integer>>
+    CompletableFuture<Integer> result = stream
+            .map(FutureValue::wrap)
+            .map(FutureValue.filter(i -> (i & 1) == 0))
+            .map(FutureValue.map(i -> i * i))
+            .reduce(FutureValue.identity(0), FutureValue.accumulate(Integer::sum))
+            .asFuture();
+
+    // assume stream is an existing Stream<CompletableFuture<Integer>>
+    Optional<CompletableFuture<Integer>> result = stream
+            .map(FutureValue::wrap)
+            .map(FutureValue.filter(i -> (i & 1) == 0))
+            .map(FutureValue.map(i -> i * i))
+            .reduce(FutureValue.accumulate(Integer::sum))
+            .map(FutureValue::asFuture);
+
+    // assume stream is an existing Stream<CompletableFuture<T>>
+    CompletableFuture<List<T>> list = stream
+            .map(FutureValue::wrap)
+            .map(FutureValue.filter(Objects::nonNull))
+            .collect(FutureValue.collect(toList()));
+
+Note that this last example is equivalent to the following:
+
+    CompletableFuture<List<T>> list = stream
+            .collect(filtering(completableFutures(toList()), Objects::nonNull));

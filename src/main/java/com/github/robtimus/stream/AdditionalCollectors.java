@@ -298,7 +298,7 @@ public final class AdditionalCollectors {
      * Returns a {@link Collector} that accumulates {@link CompletableFuture} instances into a new {@link CompletableFuture}.
      *
      * @param <T> The result type of the {@link CompletableFuture} instances.
-     * @param <A> The accumulator used by the collector for the {@link CompletableFuture} results.
+     * @param <A> The intermediate accumulation type of the {@link Collector}.
      * @param <R> The result type of the collected {@link CompletableFuture}.
      * @param collector The collector for the {@link CompletableFuture} results.
      * @return A {@link Collector} that collects {@link CompletableFuture} instances.

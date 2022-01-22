@@ -638,7 +638,7 @@ class AdditionalCollectorsTest {
         @Test
         @DisplayName("collect filtering")
         void testCollectFiltering() {
-            int size = 20;
+            int size = 4 * threadPoolSize;
 
             CompletableFuture<List<Integer>> result = IntStream.range(0, size)
                     .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
