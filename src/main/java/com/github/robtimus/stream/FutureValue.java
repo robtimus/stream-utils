@@ -17,46 +17,41 @@
 
 package com.github.robtimus.stream;
 
-import java.util.Comparator;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BinaryOperator;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.function.ToIntFunction;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collector;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * A class that allows filtering and mapping on {@link CompletableFuture} inside streams.
+ * A class that allows filtering and mapping on {@link CompletableFuture} instances inside streams.
  * <p>
  * In streams, applying operations such as {@link Stream#filter(Predicate)} immediately alter the state of the streams. When using streams of
- * {@link CompletableFuture}, the result is not available when the operation is applied. This class is meant to help with that issue as far as
+ * {@link CompletableFuture}, the result is not available when the stream operation is applied. This class is meant to help with that issue as far as
  * possible. It does so by providing the most essential functionality using asynchronous mapping:
  * <ul>
  * <li>Filtering values. However, because the actual filtering is done asynchronously, instead of using {@link Stream#filter(Predicate)},
  *     {@link Stream#map(Function)} should be used in combination with {@link #filter(Predicate)}.</li>
  * <li>Transforming values, using a combination of {@link Stream#map(Function)} and {@link #map(Function)}.</li>
- * <li>Reducing values, using a combination of {@link Stream#reduce(BinaryOperator)} or {@link Stream#reduce(Object, BinaryOperator)} and
- *     {@link #identity(Object)} and {@link #accumulate(BinaryOperator)}.
  * <li>Collecting values, using a combination of {@link Stream#collect(Collector)} and {@link #collect(Collector)}.</li>
  * <li>Running an action on values, using a combination of {@link Stream#forEach(Consumer)} and {@link #run(Consumer)}.</li>
  * </ul>
- * For example, the following can be used to combine a stream of {@link CompletableFuture} objects containing numbers, filtering out the odd values:
+ * Most other operations rely on the internal state of the stream to change. These operations should not be used after the first mapping to
+ * {@link #wrap(CompletableFuture)}. The only stream operations that can safely be used are {@link Stream#map(Function)} (both for mapping and
+ * filtering), {@link Stream#forEach(Consumer)} and {@link Stream#collect(Collector)}. For other methods, if possible, use
+ * {@link Stream#collect(Collector)} as replacement. For instance, the following can be used as replacement for {@link Stream#reduce(BinaryOperator)}
+ * using {@link Collectors#reducing(BinaryOperator)}:
  * <pre><code>
- * CompletableFuture&lt;Integer&gt; result = stream
+ * CompletableFuture&lt;Optional&lt;Integer&gt;&gt; result = stream
  *         .map(FutureValue::wrap)
  *         .map(FutureValue.filter(i -&gt; (i &amp; 1) == 0))
- *         .reduce(FutureValue.identity(0), FutureValue.accumulate(Integer::sum))
- *         .asFuture();
+ *         .collect(FutureValue.collect(reducing(Integer::sum));
  * </code></pre>
- * <p>
- * Note that after the first mapping to {@link #wrap(CompletableFuture)}, all operations on the stream should be performed using methods from this
- * class. That means that some operations, like {@link Stream#mapToInt(ToIntFunction)} but also {@link Stream#distinct()} or
- * {@link Stream#sorted(Comparator)}, cannot be properly called anymore, as these are not applied to the {@link CompletableFuture} results but instead
- * {@code FutureValue} instances.
  *
  * @author Rob Spoor
  * @param <T> The type of {@link CompletableFuture} result.
@@ -67,17 +62,6 @@ public final class FutureValue<T> {
 
     private FutureValue(CompletableFuture<ValueHolder<T>> future) {
         this.future = future;
-    }
-
-    /**
-     * Returns a {@link CompletableFuture} for this {@code FutureValue}. This method should only be called for results of calls to
-     * {@link Stream#reduce(BinaryOperator)} or {@link Stream#reduce(Object, BinaryOperator)}. Using it in intermediate stream steps may result in
-     * unexpected errors.
-     *
-     * @return A {@link CompletableFuture} for this {@code FutureValue}.
-     */
-    public CompletableFuture<T> asFuture() {
-        return future.thenApply(ValueHolder::value);
     }
 
     /**
@@ -119,31 +103,6 @@ public final class FutureValue<T> {
     public static <T, R> Function<FutureValue<T>, FutureValue<R>> map(Function<? super T, ? extends R> mapper) {
         Objects.requireNonNull(mapper);
         return value -> new FutureValue<>(value.future.thenApply(holder -> holder.map(mapper)));
-    }
-
-    /**
-     * Returns a {@code FutureValue} for an identity value. This is usually used as the identity in {@link Stream#reduce(Object, BinaryOperator)}.
-     *
-     * @param <T> The type of {@link CompletableFuture} result.
-     * @param identity The identity value for which to return a {@code FutureValue}.
-     * @return A {@code FutureValue} for the given identity value
-     */
-    public static <T> FutureValue<T> identity(T identity) {
-        return new FutureValue<>(CompletableFuture.completedFuture(new ValueHolder<>(identity)));
-    }
-
-    /**
-     * Returns a binary operator that combines two {@code FutureValue} instances. This is usually used as the accumulator in
-     * {@link Stream#reduce(BinaryOperator)} or {@link Stream#reduce(Object, BinaryOperator)}.
-     *
-     * @param <T> The type of {@link CompletableFuture} result.
-     * @param accumulator The function to use to combine two {@link CompletableFuture} results.
-     * @return A binary operator that combines two {@code FutureValue} instances.
-     * @throws NullPointerException If the given binary operator is {@code null}.
-     */
-    public static <T> BinaryOperator<FutureValue<T>> accumulate(BinaryOperator<T> accumulator) {
-        Objects.requireNonNull(accumulator);
-        return (value1, value2) -> new FutureValue<>(value1.future.thenCombine(value2.future, (h1, h2) -> h1.combine(h2, accumulator)));
     }
 
     /**
@@ -197,7 +156,7 @@ public final class FutureValue<T> {
      * or {@link Stream#forEachOrdered(Consumer)}.
      * <p>
      * Although this method can be used in a call to {@link Stream#peek(Consumer)}, the result is unpredictable due to the asynchronous nature of
-     * {@link CompletableFuture}s.
+     * {@link CompletableFuture}s. The same goes for {@link Stream#forEachOrdered(Consumer)}.
      *
      * @param <T> The type of {@link CompletableFuture} result.
      * @param action The action to perform for each {@link CompletableFuture} result. Note that the action is called asynchronously.
@@ -226,29 +185,12 @@ public final class FutureValue<T> {
             this.filtered = true;
         }
 
-        private T value() {
-            if (filtered) {
-                throw new IllegalStateException(Messages.FutureValue.valueFilteredOut.get());
-            }
-            return value;
-        }
-
         private ValueHolder<T> filter(Predicate<? super T> predicate) {
             return filtered || !predicate.test(value) ? filtered() : this;
         }
 
         private <R> ValueHolder<R> map(Function<? super T, ? extends R> mapper) {
             return filtered ? filtered() : new ValueHolder<>(mapper.apply(value));
-        }
-
-        private ValueHolder<T> combine(ValueHolder<T> other, BinaryOperator<T> combiner) {
-            if (other.filtered) {
-                return this;
-            }
-            if (filtered) {
-                return other;
-            }
-            return new ValueHolder<>(combiner.apply(value, other.value));
         }
 
         private void run(Consumer<? super T> action) {
