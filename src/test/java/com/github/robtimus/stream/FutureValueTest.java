@@ -20,8 +20,12 @@ package com.github.robtimus.stream;
 import static java.util.stream.Collectors.reducing;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toSet;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.in;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.Collections;
@@ -31,6 +35,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -41,6 +46,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("nls")
 class FutureValueTest {
 
     private int threadPoolSize = 5;
@@ -574,6 +580,476 @@ class FutureValueTest {
         @DisplayName("null action")
         void testNullPredicate() {
             assertThrows(NullPointerException.class, () -> FutureValue.run(null));
+        }
+    }
+
+    @Nested
+    @DisplayName("findAny")
+    class FindAny {
+
+        @Nested
+        @DisplayName("sequential")
+        class Sequential {
+
+            @Nested
+            @DisplayName("fastest first")
+            class FastedFirst {
+
+                @Test
+                @DisplayName("empty")
+                void testEmpty() {
+                    int size = 0;
+
+                    CompletableFuture<Optional<Integer>> result = IntStream.range(0, size)
+                            .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                            .map(FutureValue::wrap)
+                            .collect(FutureValue.findAny());
+
+                    Optional<Integer> resultValue = assertDoesNotThrow(() -> result.get(10, TimeUnit.SECONDS));
+
+                    assertEquals(Optional.empty(), resultValue);
+                }
+
+                @Test
+                @DisplayName("unfiltered")
+                void testUnfiltered() {
+                    int size = 2 * threadPoolSize;
+
+                    CompletableFuture<Optional<Integer>> result = IntStream.range(0, size)
+                            .limit(size)
+                            .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                            .map(FutureValue::wrap)
+                            .collect(FutureValue.findAny());
+
+                    List<Integer> expected = IntStream.range(0, size)
+                            .map(i -> i * i)
+                            .boxed()
+                            .collect(toList());
+
+                    Optional<Integer> resultValue = assertDoesNotThrow(() -> result.get(10, TimeUnit.SECONDS));
+
+                    assertNotEquals(Optional.empty(), resultValue);
+
+                    assertThat(resultValue.get(), in(expected));
+                }
+
+                @Test
+                @DisplayName("filtered")
+                void testFiltered() {
+                    int size = 2 * threadPoolSize;
+
+                    CompletableFuture<Optional<Integer>> result = IntStream.range(0, size)
+                            .limit(size)
+                            .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                            .map(FutureValue::wrap)
+                            .map(FutureValue.filter(i -> (i & 1) == 0))
+                            .collect(FutureValue.findAny());
+
+                    List<Integer> expected = IntStream.range(0, size)
+                            .map(i -> i * i)
+                            .filter(i -> (i & 1) == 0)
+                            .boxed()
+                            .collect(toList());
+
+                    Optional<Integer> resultValue = assertDoesNotThrow(() -> result.get(10, TimeUnit.SECONDS));
+
+                    assertNotEquals(Optional.empty(), resultValue);
+
+                    assertThat(resultValue.get(), in(expected));
+                }
+
+                @Test
+                @DisplayName("all filtered")
+                void testAllFiltered() {
+                    int size = 2 * threadPoolSize;
+
+                    CompletableFuture<Optional<Integer>> result = IntStream.range(0, size)
+                            .limit(size)
+                            .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                            .map(FutureValue::wrap)
+                            .map(FutureValue.filter(i -> false))
+                            .collect(FutureValue.findAny());
+
+                    Optional<Integer> resultValue = assertDoesNotThrow(() -> result.get(10, TimeUnit.SECONDS));
+
+                    assertEquals(Optional.empty(), resultValue);
+                }
+
+                @Test
+                @DisplayName("null elements")
+                void testNullElements() {
+                    int size = 2 * threadPoolSize;
+
+                    CompletableFuture<Optional<Integer>> result = IntStream.range(0, size)
+                            .limit(size)
+                            .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                            .map(FutureValue::wrap)
+                            .map(FutureValue.map(i -> (Integer) null))
+                            .collect(FutureValue.findAny());
+
+                    ExecutionException exception = assertThrows(ExecutionException.class, () -> result.get(10, TimeUnit.SECONDS));
+                    assertInstanceOf(NullPointerException.class, exception.getCause());
+                }
+            }
+
+            @Nested
+            @DisplayName("slowest first")
+            class SlowestFirst {
+
+                @Test
+                @DisplayName("empty")
+                void testEmpty() {
+                    int size = 0;
+
+                    // Use a reversed stream so first elements will take longer to complete
+                    CompletableFuture<Optional<Integer>> result = IntStream.iterate(size - 1, i -> i - 1)
+                            .limit(size)
+                            .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                            .map(FutureValue::wrap)
+                            .collect(FutureValue.findAny());
+
+                    Optional<Integer> resultValue = assertDoesNotThrow(() -> result.get(10, TimeUnit.SECONDS));
+
+                    assertEquals(Optional.empty(), resultValue);
+                }
+
+                @Test
+                @DisplayName("unfiltered")
+                void testUnfiltered() {
+                    int size = 2 * threadPoolSize;
+
+                    // Use a reversed stream so first elements will take longer to complete
+                    CompletableFuture<Optional<Integer>> result = IntStream.iterate(size - 1, i -> i - 1)
+                            .limit(size)
+                            .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                            .map(FutureValue::wrap)
+                            .collect(FutureValue.findAny());
+
+                    List<Integer> expected = IntStream.range(0, size)
+                            .map(i -> i * i)
+                            .boxed()
+                            .collect(toList());
+
+                    Optional<Integer> resultValue = assertDoesNotThrow(() -> result.get(10, TimeUnit.SECONDS));
+
+                    assertNotEquals(Optional.empty(), resultValue);
+
+                    assertThat(resultValue.get(), in(expected));
+                }
+
+                @Test
+                @DisplayName("filtered")
+                void testFiltered() {
+                    int size = 2 * threadPoolSize;
+
+                    // Use a reversed stream so first elements will take longer to complete
+                    CompletableFuture<Optional<Integer>> result = IntStream.iterate(size - 1, i -> i - 1)
+                            .limit(size)
+                            .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                            .map(FutureValue::wrap)
+                            .map(FutureValue.filter(i -> (i & 1) == 0))
+                            .collect(FutureValue.findAny());
+
+                    List<Integer> expected = IntStream.range(0, size)
+                            .map(i -> i * i)
+                            .filter(i -> (i & 1) == 0)
+                            .boxed()
+                            .collect(toList());
+
+                    Optional<Integer> resultValue = assertDoesNotThrow(() -> result.get(10, TimeUnit.SECONDS));
+
+                    assertNotEquals(Optional.empty(), resultValue);
+
+                    assertThat(resultValue.get(), in(expected));
+                }
+
+                @Test
+                @DisplayName("all filtered")
+                void testAllFiltered() {
+                    int size = 2 * threadPoolSize;
+
+                    // Use a reversed stream so first elements will take longer to complete
+                    CompletableFuture<Optional<Integer>> result = IntStream.iterate(size - 1, i -> i - 1)
+                            .limit(size)
+                            .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                            .map(FutureValue::wrap)
+                            .map(FutureValue.filter(i -> false))
+                            .collect(FutureValue.findAny());
+
+                    Optional<Integer> resultValue = assertDoesNotThrow(() -> result.get(10, TimeUnit.SECONDS));
+
+                    assertEquals(Optional.empty(), resultValue);
+                }
+
+                @Test
+                @DisplayName("null elements")
+                void testNullElements() {
+                    int size = 2 * threadPoolSize;
+
+                    // Use a reversed stream so first elements will take longer to complete
+                    CompletableFuture<Optional<Integer>> result = IntStream.iterate(size - 1, i -> i - 1)
+                            .limit(size)
+                            .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                            .map(FutureValue::wrap)
+                            .map(FutureValue.map(i -> (Integer) null))
+                            .collect(FutureValue.findAny());
+
+                    ExecutionException exception = assertThrows(ExecutionException.class, () -> result.get(10, TimeUnit.SECONDS));
+                    assertInstanceOf(NullPointerException.class, exception.getCause());
+                }
+            }
+
+            @Test
+            @DisplayName("with errors")
+            void testWithErrors() {
+                int size = 2 * threadPoolSize;
+
+                CompletableFuture<Optional<Integer>> result = IntStream.range(0, size)
+                        .mapToObj(i -> CompletableFuture.supplyAsync(() -> Integer.parseInt("s"), executor))
+                        .map(FutureValue::wrap)
+                        .collect(FutureValue.findAny());
+
+                ExecutionException exception = assertThrows(ExecutionException.class, () -> result.get(10, TimeUnit.SECONDS));
+                assertInstanceOf(NumberFormatException.class, exception.getCause());
+            }
+        }
+
+        @Nested
+        @DisplayName("parallel")
+        class Parallel {
+
+            @Nested
+            @DisplayName("fastest first")
+            class FastedFirst {
+
+                @Test
+                @DisplayName("empty")
+                void testEmpty() {
+                    int size = 0;
+
+                    CompletableFuture<Optional<Integer>> result = IntStream.range(0, size)
+                            .parallel()
+                            .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                            .map(FutureValue::wrap)
+                            .collect(FutureValue.findAny(executor));
+
+                    Optional<Integer> resultValue = assertDoesNotThrow(() -> result.get(10, TimeUnit.SECONDS));
+
+                    assertEquals(Optional.empty(), resultValue);
+                }
+
+                @Test
+                @DisplayName("unfiltered")
+                void testUnfiltered() {
+                    int size = 2 * threadPoolSize;
+
+                    CompletableFuture<Optional<Integer>> result = IntStream.range(0, size)
+                            .limit(size)
+                            .parallel()
+                            .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                            .map(FutureValue::wrap)
+                            .collect(FutureValue.findAny(executor));
+
+                    List<Integer> expected = IntStream.range(0, size)
+                            .map(i -> i * i)
+                            .boxed()
+                            .collect(toList());
+
+                    Optional<Integer> resultValue = assertDoesNotThrow(() -> result.get(10, TimeUnit.SECONDS));
+
+                    assertNotEquals(Optional.empty(), resultValue);
+
+                    assertThat(resultValue.get(), in(expected));
+                }
+
+                @Test
+                @DisplayName("filtered")
+                void testFiltered() {
+                    int size = 2 * threadPoolSize;
+
+                    CompletableFuture<Optional<Integer>> result = IntStream.range(0, size)
+                            .limit(size)
+                            .parallel()
+                            .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                            .map(FutureValue::wrap)
+                            .map(FutureValue.filter(i -> (i & 1) == 0))
+                            .collect(FutureValue.findAny(executor));
+
+                    List<Integer> expected = IntStream.range(0, size)
+                            .map(i -> i * i)
+                            .filter(i -> (i & 1) == 0)
+                            .boxed()
+                            .collect(toList());
+
+                    Optional<Integer> resultValue = assertDoesNotThrow(() -> result.get(10, TimeUnit.SECONDS));
+
+                    assertNotEquals(Optional.empty(), resultValue);
+
+                    assertThat(resultValue.get(), in(expected));
+                }
+
+                @Test
+                @DisplayName("all filtered")
+                void testAllFiltered() {
+                    int size = 2 * threadPoolSize;
+
+                    CompletableFuture<Optional<Integer>> result = IntStream.range(0, size)
+                            .limit(size)
+                            .parallel()
+                            .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                            .map(FutureValue::wrap)
+                            .map(FutureValue.filter(i -> false))
+                            .collect(FutureValue.findAny(executor));
+
+                    Optional<Integer> resultValue = assertDoesNotThrow(() -> result.get(10, TimeUnit.SECONDS));
+
+                    assertEquals(Optional.empty(), resultValue);
+                }
+
+                @Test
+                @DisplayName("null elements")
+                void testNullElements() {
+                    int size = 2 * threadPoolSize;
+
+                    CompletableFuture<Optional<Integer>> result = IntStream.range(0, size)
+                            .limit(size)
+                            .parallel()
+                            .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                            .map(FutureValue::wrap)
+                            .map(FutureValue.map(i -> (Integer) null))
+                            .collect(FutureValue.findAny(executor));
+
+                    ExecutionException exception = assertThrows(ExecutionException.class, () -> result.get(10, TimeUnit.SECONDS));
+                    assertInstanceOf(NullPointerException.class, exception.getCause());
+                }
+            }
+
+            @Nested
+            @DisplayName("slowest first")
+            class SlowestFirst {
+
+                @Test
+                @DisplayName("empty")
+                void testEmpty() {
+                    int size = 0;
+
+                    // Use a reversed stream so first elements will take longer to complete
+                    CompletableFuture<Optional<Integer>> result = IntStream.iterate(size - 1, i -> i - 1)
+                            .limit(size)
+                            .parallel()
+                            .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                            .map(FutureValue::wrap)
+                            .collect(FutureValue.findAny(executor));
+
+                    Optional<Integer> resultValue = assertDoesNotThrow(() -> result.get(10, TimeUnit.SECONDS));
+
+                    assertEquals(Optional.empty(), resultValue);
+                }
+
+                @Test
+                @DisplayName("unfiltered")
+                void testUnfiltered() {
+                    int size = 2 * threadPoolSize;
+
+                    // Use a reversed stream so first elements will take longer to complete
+                    CompletableFuture<Optional<Integer>> result = IntStream.iterate(size - 1, i -> i - 1)
+                            .limit(size)
+                            .parallel()
+                            .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                            .map(FutureValue::wrap)
+                            .collect(FutureValue.findAny(executor));
+
+                    List<Integer> expected = IntStream.range(0, size)
+                            .map(i -> i * i)
+                            .boxed()
+                            .collect(toList());
+
+                    Optional<Integer> resultValue = assertDoesNotThrow(() -> result.get(10, TimeUnit.SECONDS));
+
+                    assertNotEquals(Optional.empty(), resultValue);
+
+                    assertThat(resultValue.get(), in(expected));
+                }
+
+                @Test
+                @DisplayName("filtered")
+                void testFiltered() {
+                    int size = 2 * threadPoolSize;
+
+                    // Use a reversed stream so first elements will take longer to complete
+                    CompletableFuture<Optional<Integer>> result = IntStream.iterate(size - 1, i -> i - 1)
+                            .limit(size)
+                            .parallel()
+                            .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                            .map(FutureValue::wrap)
+                            .map(FutureValue.filter(i -> (i & 1) == 0))
+                            .collect(FutureValue.findAny(executor));
+
+                    List<Integer> expected = IntStream.range(0, size)
+                            .map(i -> i * i)
+                            .filter(i -> (i & 1) == 0)
+                            .boxed()
+                            .collect(toList());
+
+                    Optional<Integer> resultValue = assertDoesNotThrow(() -> result.get(10, TimeUnit.SECONDS));
+
+                    assertNotEquals(Optional.empty(), resultValue);
+
+                    assertThat(resultValue.get(), in(expected));
+                }
+
+                @Test
+                @DisplayName("all filtered")
+                void testAllFiltered() {
+                    int size = 2 * threadPoolSize;
+
+                    // Use a reversed stream so first elements will take longer to complete
+                    CompletableFuture<Optional<Integer>> result = IntStream.iterate(size - 1, i -> i - 1)
+                            .limit(size)
+                            .parallel()
+                            .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                            .map(FutureValue::wrap)
+                            .map(FutureValue.filter(i -> false))
+                            .collect(FutureValue.findAny(executor));
+
+                    Optional<Integer> resultValue = assertDoesNotThrow(() -> result.get(10, TimeUnit.SECONDS));
+
+                    assertEquals(Optional.empty(), resultValue);
+                }
+
+                @Test
+                @DisplayName("null elements")
+                void testNullElements() {
+                    int size = 2 * threadPoolSize;
+
+                    // Use a reversed stream so first elements will take longer to complete
+                    CompletableFuture<Optional<Integer>> result = IntStream.iterate(size - 1, i -> i - 1)
+                            .limit(size)
+                            .parallel()
+                            .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                            .map(FutureValue::wrap)
+                            .map(FutureValue.map(i -> (Integer) null))
+                            .collect(FutureValue.findAny(executor));
+
+                    ExecutionException exception = assertThrows(ExecutionException.class, () -> result.get(10, TimeUnit.SECONDS));
+                    assertInstanceOf(NullPointerException.class, exception.getCause());
+                }
+            }
+
+            @Test
+            @DisplayName("with errors")
+            void testWithErrors() {
+                int size = 2 * threadPoolSize;
+
+                CompletableFuture<Optional<Integer>> result = IntStream.range(0, size)
+                        .parallel()
+                        .mapToObj(i -> CompletableFuture.supplyAsync(() -> Integer.parseInt("s"), executor))
+                        .map(FutureValue::wrap)
+                        .collect(FutureValue.findAny());
+
+                ExecutionException exception = assertThrows(ExecutionException.class, () -> result.get(10, TimeUnit.SECONDS));
+                assertInstanceOf(NumberFormatException.class, exception.getCause());
+            }
         }
     }
 

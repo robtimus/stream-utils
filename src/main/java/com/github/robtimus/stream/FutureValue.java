@@ -17,12 +17,24 @@
 
 package com.github.robtimus.stream;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BiFunction;
 import java.util.function.BinaryOperator;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
@@ -41,6 +53,7 @@ import java.util.stream.Stream;
  * <li>Collecting values, using a combination of {@link Stream#collect(Collector)} and {@link #collect(Collector)}.</li>
  * <li>Running an action on values, using a combination of {@link Stream#forEach(Consumer)} and {@link #run(Consumer)}.</li>
  * </ul>
+ * <p>
  * Most other operations rely on the internal state of the stream to change. These operations should not be used after the first mapping to
  * {@link #wrap(CompletableFuture)}. The only stream operations that can safely be used are {@link Stream#map(Function)} (both for mapping and
  * filtering), {@link Stream#forEach(Consumer)} and {@link Stream#collect(Collector)}. For other methods, if possible, use
@@ -52,6 +65,55 @@ import java.util.stream.Stream;
  *         .map(FutureValue.filter(i -&gt; (i &amp; 1) == 0))
  *         .collect(FutureValue.collect(reducing(Integer::sum));
  * </code></pre>
+ * <p>
+ * The following is a list of stream operations and their possible {@link Collector} replacements:
+ * <blockquote>
+ * <table border="0" cellspacing="3" cellpadding="0">
+ *   <caption style="display:none">Stream operations</caption>
+ *   <thead>
+ *     <tr>
+ *       <th class="colFirst">Stream operation</th>
+ *       <th class="colLast">Replacement</th>
+ *     </tr>
+ *   </thead>
+ *   <tbody>
+ *     <tr class="altColor">
+ *       <td class="colFirst">{@link Stream#toArray()}</td>
+ *       <td class="colLast">{@link Collectors#toList()} and {@link List#toArray()}</td>
+ *     </tr>
+ *     <tr class="rowColor">
+ *       <td class="colFirst">{@link Stream#reduce(BinaryOperator)}</td>
+ *       <td class="colLast">{@link Collectors#reducing(BinaryOperator)}</td>
+ *     </tr>
+ *     <tr class="altColor">
+ *       <td class="colFirst">{@link Stream#reduce(Object, BinaryOperator)}</td>
+ *       <td class="colLast">{@link Collectors#reducing(Object, BinaryOperator)}</td>
+ *     </tr>
+ *     <tr class="rowColor">
+ *       <td class="colFirst">{@link Stream#reduce(Object, BiFunction, BinaryOperator)}</td>
+ *       <td class="colLast">{@link Collectors#reducing(Object, Function, BinaryOperator)}<br>
+ *                           Note that this transforms values before accumulating them.</td>
+ *     </tr>
+ *     <tr class="altColor">
+ *       <td class="colFirst">{@link Stream#min(Comparator)}</td>
+ *       <td class="colLast">{@link Collectors#minBy(Comparator)}</td>
+ *     </tr>
+ *     <tr class="rowColor">
+ *       <td class="colFirst">{@link Stream#max(Comparator)}</td>
+ *       <td class="colLast">{@link Collectors#maxBy(Comparator)}</td>
+ *     </tr>
+ *     <tr class="altColor">
+ *       <td class="colFirst">{@link Stream#count()}</td>
+ *       <td class="colLast">{@link Collectors#counting()}</td>
+ *     </tr>
+ *     <tr class="rowColor">
+ *       <td class="colFirst">{@link Stream#findAny()}</td>
+ *       <td class="colLast">{@link #findAny()}<br>
+ *                           {@link #findAny(ExecutorService)}</td>
+ *     </tr>
+ *   </tbody>
+ * </table>
+ * </blockquote>
  *
  * @author Rob Spoor
  * @param <T> The type of {@link CompletableFuture} result.
@@ -166,6 +228,122 @@ public final class FutureValue<T> {
     public static <T> Consumer<FutureValue<T>> run(Consumer<? super T> action) {
         Objects.requireNonNull(action);
         return value -> value.future.thenAccept(holder -> holder.run(action));
+    }
+
+    /**
+     * Returns a {@link Collector} that returns any {@link CompletableFuture} result.
+     * To prevent waiting for more {@link CompletableFuture}s to finish than necessary, this method will create another {@link CompletableFuture}
+     * using the {@link ForkJoinPool#commonPool()}. This will return as value the first available result, or throw the first available error.
+     *
+     * @param <T> The type of {@link CompletableFuture} result.
+     * @return A {@link Collector} that returns any {@link CompletableFuture} result.
+     */
+    public static <T> Collector<FutureValue<T>, ?, CompletableFuture<Optional<T>>> findAny() {
+        return findAny(CompletableFuture::supplyAsync);
+    }
+
+    /**
+     * Returns a {@link Collector} that returns any {@link CompletableFuture} result.
+     * To prevent waiting for more {@link CompletableFuture}s to finish than necessary, this method will create another {@link CompletableFuture}.
+     * This will return as value the first available result, or throw the first available error.
+     *
+     * @param <T> The type of {@link CompletableFuture} result.
+     * @param executor The executor service to use for creating the new {@link CompletableFuture}.
+     * @return A {@link Collector} that returns any {@link CompletableFuture} result.
+     * @throws NullPointerException If the given executor service is {@code null}.
+     */
+    public static <T> Collector<FutureValue<T>, ?, CompletableFuture<Optional<T>>> findAny(ExecutorService executor) {
+        Objects.requireNonNull(executor);
+        return findAny(supplier -> CompletableFuture.supplyAsync(supplier, executor));
+    }
+
+    private static <T> Collector<FutureValue<T>, ?, CompletableFuture<Optional<T>>> findAny(
+            Function<Supplier<Optional<T>>, CompletableFuture<Optional<T>>> executor) {
+
+        // The first non-filtered ValueHolder to be found, or null if none are found
+        final AtomicReference<ValueHolder<T>> resultValue = new AtomicReference<>(null);
+        // The first error that occurred
+        final AtomicReference<Throwable> error = new AtomicReference<>(null);
+
+        // The total and finished counts; totalCount >= finishedCount, assuming there is no overflow (that's why long is used)
+        // Assuming all futures will finish (no infinite loops or endless waiting), finishedCount will eventually catch up with totalCount
+        final AtomicLong totalCount = new AtomicLong(0);
+        final AtomicLong finishedCount = new AtomicLong(0);
+
+        // The lock and condition for a future to be finished
+        // This prevents busy waiting while waiting for either a result to be available or finishedCount to catch up with totalCount
+        final Lock lock = new ReentrantLock();
+        final Condition futureFinished = lock.newCondition();
+
+        class FutureValueCollector {
+
+            private void accumulate(FutureValue<T> value) {
+                totalCount.incrementAndGet();
+                value.future.handle((v, e) -> {
+                    lock.lock();
+                    try {
+                        if (e == null && !v.filtered) {
+                            resultValue.compareAndSet(null, v);
+                        } else if (e != null) {
+                            error.compareAndSet(null, e);
+                        }
+                        finishedCount.incrementAndGet();
+                        futureFinished.signal();
+                    } finally {
+                        lock.unlock();
+                    }
+                    return null;
+                });
+            }
+
+            private FutureValueCollector combine(@SuppressWarnings("unused") FutureValueCollector other) {
+                return this;
+            }
+
+            private CompletableFuture<Optional<T>> finish() {
+                return executor.apply(this::result);
+            }
+
+            private Optional<T> result() {
+                ValueHolder<T> holder;
+                Throwable t = null;
+
+                lock.lock();
+                try {
+                    while ((holder = resultValue.get()) == null && (t = error.get()) == null && totalCount.get() > finishedCount.get()) {
+                        futureFinished.await();
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(e);
+                } finally {
+                    lock.unlock();
+                }
+                throwError(t);
+
+                // t == null, so holder == null means totalCount == finishedCount, and all futures were filtered out
+                return holder != null ? Optional.of(holder.value) : Optional.empty();
+            }
+
+            private void throwError(Throwable t) {
+                if (t instanceof Error) {
+                    throw (Error) t;
+                }
+                if (t instanceof RuntimeException) {
+                    throw (RuntimeException) t;
+                }
+                if (t != null) {
+                    throw new IllegalStateException(t);
+                }
+            }
+        }
+
+        return Collector.of(
+                FutureValueCollector::new,
+                FutureValueCollector::accumulate,
+                FutureValueCollector::combine,
+                FutureValueCollector::finish
+        );
     }
 
     private static final class ValueHolder<T> {
