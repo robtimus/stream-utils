@@ -18,7 +18,6 @@
 package com.github.robtimus.stream;
 
 import static com.github.robtimus.stream.AdditionalCollectors.completableFutures;
-import static com.github.robtimus.stream.AdditionalCollectors.filtering;
 import static com.github.robtimus.stream.AdditionalCollectors.findSingle;
 import static com.github.robtimus.stream.AdditionalCollectors.findUnique;
 import static com.github.robtimus.stream.AdditionalCollectors.partitioning;
@@ -38,7 +37,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
@@ -47,7 +45,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BinaryOperator;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collector;
@@ -578,27 +575,6 @@ class AdditionalCollectorsTest {
     }
 
     @Nested
-    @DisplayName("filtering")
-    class Filtering {
-
-        // filtering functionality is tested as part of CompletableFuture testing
-
-        @Test
-        @DisplayName("with null collector")
-        void testNullCollector() {
-            Predicate<Integer> filter = Objects::nonNull;
-            assertThrows(NullPointerException.class, () -> filtering(null, filter));
-        }
-
-        @Test
-        @DisplayName("with null filter")
-        void testNullFilter() {
-            Collector<Integer, ?, List<Integer>> collector = toList();
-            assertThrows(NullPointerException.class, () -> filtering(collector, null));
-        }
-    }
-
-    @Nested
     @DisplayName("completableFutures")
     class CompletableFutures {
 
@@ -617,8 +593,8 @@ class AdditionalCollectorsTest {
         }
 
         @Test
-        @DisplayName("collect")
-        void testCollect() {
+        @DisplayName("collect sequential")
+        void testCollectSequential() {
             int size = 2 * threadPoolSize;
 
             CompletableFuture<List<Integer>> result = IntStream.range(0, size)
@@ -627,26 +603,6 @@ class AdditionalCollectorsTest {
 
             List<Integer> expected = IntStream.range(0, size)
                     .map(i -> i * i)
-                    .boxed()
-                    .collect(toList());
-
-            List<Integer> resultList = assertDoesNotThrow(() -> result.get(10, TimeUnit.SECONDS));
-
-            assertEquals(expected, resultList);
-        }
-
-        @Test
-        @DisplayName("collect filtering")
-        void testCollectFiltering() {
-            int size = 4 * threadPoolSize;
-
-            CompletableFuture<List<Integer>> result = IntStream.range(0, size)
-                    .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
-                    .collect(completableFutures(filtering(toList(), i -> (i & 1) == 0)));
-
-            List<Integer> expected = IntStream.range(0, size)
-                    .map(i -> i * i)
-                    .filter(i -> (i & 1) == 0)
                     .boxed()
                     .collect(toList());
 

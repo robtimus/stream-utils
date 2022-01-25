@@ -170,8 +170,7 @@ public final class FutureValue<T> {
     /**
      * Returns a {@link Collector} that accumulates {@code FutureValue} instances into a {@link CompletableFuture}.
      * This method is similar to {@link AdditionalCollectors#completableFutures(Collector)}. That method can be used if no filtering or mapping is
-     * needed on the {@link CompletableFuture} results. If only one filter operation is needed, that method can also be used in combination with
-     * {@link AdditionalCollectors#filtering(Collector, Predicate)}.
+     * needed on the {@link CompletableFuture} results.
      *
      * @param <T> The result type of the {@link CompletableFuture} instances.
      * @param <A> The intermediate accumulation type of the {@link Collector}.

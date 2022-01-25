@@ -18,7 +18,7 @@ Class [AdditionalCollectors](https://robtimus.github.io/stream-utils/apidocs/com
 `toMapWithSupplier` is like `Collectors.toMap`. However, unlike the version with only a key and value mapper, it allows you to provide a `Map` supplier. Unlike the version with a supplier there is no need to provide a merge function.
 
 ### completableFutures
-`completableFutures` can collect a stream of `CompletableFuture` elements into a combined `CompletableFuture`. Since the `CompletableFuture` results are not available until collection time, additional method `filtering` can be used to provide filtering during collection time.
+`completableFutures` can collect a stream of `CompletableFuture` elements into a combined `CompletableFuture`.
 
 ### partitioning
 `partitioning` splits the stream into several partitions. Each partition is collected separately, and these partition results are then collected. For example, the following can be used to create a `List<List<T>>`, where each inner list has at most 10 elements:
@@ -41,35 +41,14 @@ Like `AdditionalCollectors.partitioning`, this method will throw an exception wh
 
 ## FutureValue
 
-Class [FutureValue](https://robtimus.github.io/stream-utils/apidocs/com/github/robtimus/stream/FutureValue.html) provides utility methods to work with `CompletableFuture` in streams. Unlike `AdditionalCollectors.completableFutures`, methods in this class can be used to provide intermediate filtering and mapping. It also provides support for `Stream.reduce` and `Stream.forEach` for `CompletableFuture`.
+Class [FutureValue](https://robtimus.github.io/stream-utils/apidocs/com/github/robtimus/stream/FutureValue.html) provides utility methods to work with `CompletableFuture` in streams. Unlike `AdditionalCollectors.completableFutures`, methods in this class can be used to provide intermediate filtering and mapping. It also provides support for `Stream.collect` and `Stream.forEach` for `CompletableFuture`.
 
-To use this class, use `Stream.map` in combination with `FutureValue.wrap`. Then `FutureValue.filter` and `FutureValue.map` can be used any number of times before `Stream.reduce`, `Stream.collect` or `Stream.forEach` is called.
+To use this class, use `Stream.map` in combination with `FutureValue.wrap`. Then `FutureValue.filter` and `FutureValue.map` can be used any number of times before `Stream.collect` or `Stream.forEach` is called.
 
-Some examples:
-
-    // assume stream is an existing Stream<CompletableFuture<Integer>>
-    CompletableFuture<Integer> result = stream
-            .map(FutureValue::wrap)
-            .map(FutureValue.filter(i -> (i & 1) == 0))
-            .map(FutureValue.map(i -> i * i))
-            .reduce(FutureValue.identity(0), FutureValue.accumulate(Integer::sum))
-            .asFuture();
-
-    // assume stream is an existing Stream<CompletableFuture<Integer>>
-    Optional<CompletableFuture<Integer>> result = stream
-            .map(FutureValue::wrap)
-            .map(FutureValue.filter(i -> (i & 1) == 0))
-            .map(FutureValue.map(i -> i * i))
-            .reduce(FutureValue.accumulate(Integer::sum))
-            .map(FutureValue::asFuture);
+For example:
 
     // assume stream is an existing Stream<CompletableFuture<T>>
     CompletableFuture<List<T>> list = stream
             .map(FutureValue::wrap)
             .map(FutureValue.filter(Objects::nonNull))
             .collect(FutureValue.collect(toList()));
-
-Note that this last example is equivalent to the following:
-
-    CompletableFuture<List<T>> list = stream
-            .collect(filtering(completableFutures(toList()), Objects::nonNull));

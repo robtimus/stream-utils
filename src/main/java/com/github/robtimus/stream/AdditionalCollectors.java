@@ -24,12 +24,10 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 import java.util.function.BinaryOperator;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collector;
 import java.util.stream.Collector.Characteristics;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Additional {@link Collector} implementations.
@@ -256,46 +254,8 @@ public final class AdditionalCollectors {
     }
 
     /**
-     * Returns a {@link Collector} that filters elements before passing them to a downstream {@link Collector}.
-     * <p>
-     * In most cases, {@link Stream#filter(Predicate)} should be preferred over this method. However, there are some cases where the elements are not
-     * available until they are collected. One such example is {@link #completableFutures(Collector)}. The {@link Stream#filter(Predicate)} method can
-     * only be applied to the {@link CompletableFuture} instances, not their results. To apply filtering to the results, wrap the collector using this
-     * method. For example, if {@code stream} is an existing {@code Stream<CompletableFuture<T>}:
-     * <pre><code>
-     * CompletableFuture&lt;List&lt;T&gt;&gt; result = stream.collect(completableFutures(filtering(Collectors.toList(), Objects::nonNull)));
-     * </code></pre>
-     * Here, {@code null} results are filtered out, whereas {@link Stream#filter(Predicate)} would only allow filtering out {@code null}
-     * {@link CompletableFuture}s.
-     *
-     * @param <T> The type of input elements for the {@link Collector}.
-     * @param <A> The intermediate accumulation type of the {@link Collector}.
-     * @param <R> The final result type of the {@link Collector}.
-     * @param downstream The downstream {@link Collector}.
-     * @param filter The filter to apply to elements before passing them to the given downstream {@link Collector}.
-     * @return A {@link Collector} that filters elements before passing them to the given downstream {@link Collector}.
-     * @throws NullPointerException If the given downstream {@link Collector} or filter is {@code null}.
-     */
-    public static <T, A, R> Collector<T, A, R> filtering(Collector<T, A, R> downstream, Predicate<? super T> filter) {
-        Objects.requireNonNull(downstream);
-        Objects.requireNonNull(filter);
-
-        Supplier<A> supplier = downstream.supplier();
-        BiConsumer<A, T> accumulator = downstream.accumulator();
-        BinaryOperator<A> combiner = downstream.combiner();
-        Function<A, R> finisher = downstream.finisher();
-
-        BiConsumer<A, T> filteringAccumulator = (a, t) -> {
-            if (filter.test(t)) {
-                accumulator.accept(a, t);
-            }
-        };
-
-        return Collector.of(supplier, filteringAccumulator, combiner, finisher);
-    }
-
-    /**
      * Returns a {@link Collector} that accumulates {@link CompletableFuture} instances into a new {@link CompletableFuture}.
+     * If the {@link CompletableFuture} results need to be mapped or filtered before collecting, use {@link FutureValue} instead.
      *
      * @param <T> The result type of the {@link CompletableFuture} instances.
      * @param <A> The intermediate accumulation type of the {@link Collector}.
