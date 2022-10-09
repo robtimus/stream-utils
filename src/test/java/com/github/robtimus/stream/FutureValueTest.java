@@ -194,6 +194,65 @@ class FutureValueTest {
     }
 
     @Nested
+    @DisplayName("flatMap")
+    class FlatMap {
+
+        @Test
+        @DisplayName("unfiltered")
+        void testUnfiltered() {
+            int size = 2 * threadPoolSize;
+
+            CompletableFuture<List<String>> result = IntStream.range(0, size)
+                    .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                    .map(FutureValue::wrap)
+                    .map(FutureValue.flatMap(i -> CompletableFuture.supplyAsync(() -> String.valueOf(i), executor)))
+                    .collect(FutureValue.collect(toList()));
+
+            List<String> expected = IntStream.range(0, size)
+                    .map(i -> i * i)
+                    .mapToObj(String::valueOf)
+                    .collect(toList());
+
+            List<String> resultList = assertDoesNotThrow(() -> result.get(10, TimeUnit.SECONDS));
+
+            assertEquals(expected, resultList);
+        }
+
+        @Test
+        @DisplayName("filtered")
+        void testFiltered() {
+            int size = 2 * threadPoolSize;
+
+            CompletableFuture<List<String>> result = IntStream.range(0, size)
+                    .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                    .map(FutureValue::wrap)
+                    .map(FutureValue.filter(i -> (i & 1) == 0))
+                    .map(FutureValue.flatMap(i -> {
+                        // assert that elements that don't match the predicate are not mapped
+                        assertEquals(0, i & 1);
+                        return CompletableFuture.supplyAsync(() -> String.valueOf(i), executor);
+                    }))
+                    .collect(FutureValue.collect(toList()));
+
+            List<String> expected = IntStream.range(0, size)
+                    .map(i -> i * i)
+                    .filter(i -> (i & 1) == 0)
+                    .mapToObj(String::valueOf)
+                    .collect(toList());
+
+            List<String> resultList = assertDoesNotThrow(() -> result.get(10, TimeUnit.SECONDS));
+
+            assertEquals(expected, resultList);
+        }
+
+        @Test
+        @DisplayName("null mapper")
+        void testNullPredicate() {
+            assertThrows(NullPointerException.class, () -> FutureValue.flatMap(null));
+        }
+    }
+
+    @Nested
     @DisplayName("collect")
     class Collect {
 

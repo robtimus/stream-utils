@@ -37,7 +37,7 @@ import java.util.stream.Collectors;
 public final class AdditionalCollectors {
 
     private static final BinaryOperator<Object> THROWING_COMBINER = (t1, t2) -> {
-        throw new IllegalStateException(Messages.AdditionalCollectors.parallelStreamsNotSupported.get());
+        throw new IllegalStateException(Messages.AdditionalCollectors.parallelStreamsNotSupported());
     };
 
     private AdditionalCollectors() {
@@ -100,7 +100,7 @@ public final class AdditionalCollectors {
      * @return A {@link Collector} that results the single element of a stream
      */
     public static <T> Collector<T, ?, Optional<T>> findSingle() {
-        return findSingle(() -> new IllegalStateException(Messages.AdditionalCollectors.multipleElements.get()));
+        return findSingle(() -> new IllegalStateException(Messages.AdditionalCollectors.multipleElements()));
     }
 
     /**
@@ -153,7 +153,7 @@ public final class AdditionalCollectors {
      * @return A {@link Collector} that results the unique element of a stream
      */
     public static <T> Collector<T, ?, Optional<T>> findUnique() {
-        return findUnique(() -> new IllegalStateException(Messages.AdditionalCollectors.multipleElements.get()));
+        return findUnique(() -> new IllegalStateException(Messages.AdditionalCollectors.multipleElements()));
     }
 
     /**
@@ -234,7 +234,7 @@ public final class AdditionalCollectors {
         K key = keyMapper.apply(element);
         V value = valueMapper.apply(element);
         if (value == null) {
-            throw new NullPointerException(Messages.AdditionalCollectors.toMap.nullValue.get(element));
+            throw new NullPointerException(Messages.AdditionalCollectors.toMap.nullValue(element));
         }
         addToMap(map, key, value);
     }
@@ -242,7 +242,7 @@ public final class AdditionalCollectors {
     private static <K, V> void addToMap(Map<K, V> map, K key, V value) {
         V existing = map.putIfAbsent(key, value);
         if (existing != null) {
-            throw new IllegalStateException(Messages.AdditionalCollectors.toMap.duplicateKey.get(key));
+            throw new IllegalStateException(Messages.AdditionalCollectors.toMap.duplicateKey(key));
         }
     }
 

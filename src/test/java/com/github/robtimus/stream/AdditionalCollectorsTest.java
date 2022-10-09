@@ -178,7 +178,7 @@ class AdditionalCollectorsTest {
             Collector<Integer, ?, Optional<Integer>> collector = findSingle();
 
             IllegalStateException exception = assertThrows(IllegalStateException.class, () -> stream.collect(collector));
-            assertEquals(Messages.AdditionalCollectors.multipleElements.get(), exception.getMessage());
+            assertEquals(Messages.AdditionalCollectors.multipleElements(), exception.getMessage());
         }
 
         @Test
@@ -198,7 +198,7 @@ class AdditionalCollectorsTest {
             Collector<Integer, ?, Optional<Integer>> collector = findSingle();
 
             IllegalStateException exception = assertThrows(IllegalStateException.class, () -> stream.collect(collector));
-            assertEquals(Messages.AdditionalCollectors.multipleElements.get(), exception.getMessage());
+            assertEquals(Messages.AdditionalCollectors.multipleElements(), exception.getMessage());
         }
 
         @Nested
@@ -273,7 +273,7 @@ class AdditionalCollectorsTest {
                 BinaryOperator<A> combiner = collector.combiner();
 
                 IllegalStateException exception = assertThrows(IllegalStateException.class, () -> combiner.apply(intermediate1, intermediate2));
-                assertEquals(Messages.AdditionalCollectors.multipleElements.get(), exception.getMessage());
+                assertEquals(Messages.AdditionalCollectors.multipleElements(), exception.getMessage());
             }
         }
 
@@ -333,7 +333,7 @@ class AdditionalCollectorsTest {
             Collector<Integer, ?, Optional<Integer>> collector = findUnique();
 
             IllegalStateException exception = assertThrows(IllegalStateException.class, () -> stream.collect(collector));
-            assertEquals(Messages.AdditionalCollectors.multipleElements.get(), exception.getMessage());
+            assertEquals(Messages.AdditionalCollectors.multipleElements(), exception.getMessage());
         }
 
         @Nested
@@ -427,7 +427,7 @@ class AdditionalCollectorsTest {
                 BinaryOperator<A> combiner = collector.combiner();
 
                 IllegalStateException exception = assertThrows(IllegalStateException.class, () -> combiner.apply(intermediate1, intermediate2));
-                assertEquals(Messages.AdditionalCollectors.multipleElements.get(), exception.getMessage());
+                assertEquals(Messages.AdditionalCollectors.multipleElements(), exception.getMessage());
             }
         }
 
@@ -492,7 +492,7 @@ class AdditionalCollectorsTest {
                 Collector<Integer, ?, ?> collector = toMapWithSupplier(i -> i % 10, Object::toString, TreeMap::new);
                 IllegalStateException exception = assertThrows(IllegalStateException.class, () -> stream.collect(collector));
 
-                String messagePattern = Messages.AdditionalCollectors.toMap.duplicateKey.get(0).replace("0", "\\d+");
+                String messagePattern = Messages.AdditionalCollectors.toMap.duplicateKey(0).replace("0", "\\d+");
                 assertThat(exception.getMessage(), matchesPattern(messagePattern));
             }
 
@@ -505,7 +505,7 @@ class AdditionalCollectorsTest {
                 Collector<Integer, ?, ?> collector = toMapWithSupplier(i -> i % 10, Object::toString, TreeMap::new);
                 IllegalStateException exception = assertThrows(IllegalStateException.class, () -> stream.collect(collector));
 
-                String messagePattern = Messages.AdditionalCollectors.toMap.duplicateKey.get(0).replace("0", "\\d+");
+                String messagePattern = Messages.AdditionalCollectors.toMap.duplicateKey(0).replace("0", "\\d+");
                 // ForkJoinTask may wrap the IllegalStateException in another IllegalStateException
                 // Add an optional IllegalStateException before the message
                 messagePattern = "(" + Pattern.quote(IllegalStateException.class.getName()) + ": )?" + messagePattern;
@@ -525,7 +525,7 @@ class AdditionalCollectorsTest {
                 Collector<Integer, ?, ?> collector = toMapWithSupplier(i -> i % 10, i -> i == 10 ? null : i.toString(), TreeMap::new);
                 NullPointerException exception = assertThrows(NullPointerException.class, () -> stream.collect(collector));
 
-                String messagePattern = Messages.AdditionalCollectors.toMap.nullValue.get(0).replace("0", "\\d+");
+                String messagePattern = Messages.AdditionalCollectors.toMap.nullValue(0).replace("0", "\\d+");
                 assertThat(exception.getMessage(), matchesPattern(messagePattern));
             }
 
@@ -544,7 +544,7 @@ class AdditionalCollectorsTest {
                     exception = (NullPointerException) exception.getCause();
                 }
 
-                String messagePattern = Messages.AdditionalCollectors.toMap.nullValue.get(0).replace("0", "\\d+");
+                String messagePattern = Messages.AdditionalCollectors.toMap.nullValue(0).replace("0", "\\d+");
                 assertThat(exception.getMessage(), matchesPattern(messagePattern));
             }
         }
@@ -833,9 +833,9 @@ class AdditionalCollectorsTest {
         IllegalStateException exception = assertThrows(IllegalStateException.class, () -> stream.collect(collector));
         // ForkJoinTask may wrap the IllegalStateException in another IllegalStateException
         // If the message is not as expected, assert that its cause is
-        if (!exception.getMessage().equals(Messages.AdditionalCollectors.parallelStreamsNotSupported.get())) {
+        if (!exception.getMessage().equals(Messages.AdditionalCollectors.parallelStreamsNotSupported())) {
             assertInstanceOf(IllegalStateException.class, exception.getCause());
-            assertEquals(Messages.AdditionalCollectors.parallelStreamsNotSupported.get(), exception.getCause().getMessage());
+            assertEquals(Messages.AdditionalCollectors.parallelStreamsNotSupported(), exception.getCause().getMessage());
         }
     }
 }

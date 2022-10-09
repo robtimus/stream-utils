@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicLong;
@@ -154,7 +155,7 @@ public final class FutureValue<T> {
 
     /**
      * Returns a function that transforms one {@code FutureValue} instance into another. This is usually used in a call to
-     * {@link Stream#map(Function)} to transform {@link CompletableFuture} result.
+     * {@link Stream#map(Function)} to transform {@link CompletableFuture} results.
      *
      * @param <T> The type of the input to the function.
      * @param <R> The type of the result of the function.
@@ -165,6 +166,23 @@ public final class FutureValue<T> {
     public static <T, R> Function<FutureValue<T>, FutureValue<R>> map(Function<? super T, ? extends R> mapper) {
         Objects.requireNonNull(mapper);
         return value -> new FutureValue<>(value.future.thenApply(holder -> holder.map(mapper)));
+    }
+
+    /**
+     * Returns a function that transforms one {@link FutureValue} instance into another. This is usually used in a call to
+     * {@link Stream#map(Function)} to transform {@link CompletableFuture} results. Unlike {@link #map(Function)}, the result of the function must be
+     * a {@link CompletionStage}, e.g. a {@link CompletableFuture}.
+     *
+     * @param <T> The type of the input to the function.
+     * @param <R> The type of the returned {@link CompletableFuture} result.
+     * @param mapper The function to apply to each {@link CompletableFuture} result.
+     * @return A function that transforms one {@code FutureValue} instance into another
+     * @throws NullPointerException If the given function is {@code null}.
+     * @since 1.1
+     */
+    public static <T, R> Function<FutureValue<T>, FutureValue<R>> flatMap(Function<? super T, ? extends CompletionStage<R>> mapper) {
+        Objects.requireNonNull(mapper);
+        return value -> new FutureValue<>(value.future.thenCompose(holder -> holder.flatMap(mapper)));
     }
 
     /**
@@ -368,6 +386,10 @@ public final class FutureValue<T> {
 
         private <R> ValueHolder<R> map(Function<? super T, ? extends R> mapper) {
             return filtered ? filtered() : new ValueHolder<>(mapper.apply(value));
+        }
+
+        private <R> CompletionStage<ValueHolder<R>> flatMap(Function<? super T, ? extends CompletionStage<R>> mapper) {
+            return filtered ? CompletableFuture.completedFuture(filtered()) : mapper.apply(value).thenApply(ValueHolder::new);
         }
 
         private void run(Consumer<? super T> action) {

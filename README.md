@@ -43,7 +43,7 @@ Like `AdditionalCollectors.partitioning`, this method will throw an exception wh
 
 Class [FutureValue](https://robtimus.github.io/stream-utils/apidocs/com/github/robtimus/stream/FutureValue.html) provides utility methods to work with `CompletableFuture` in streams. Unlike `AdditionalCollectors.completableFutures`, methods in this class can be used to provide intermediate filtering and mapping. It also provides support for `Stream.collect` and `Stream.forEach` for `CompletableFuture`.
 
-To use this class, use `Stream.map` in combination with `FutureValue.wrap`. Then `FutureValue.filter` and `FutureValue.map` can be used any number of times before `Stream.collect` or `Stream.forEach` is called.
+To use this class, use `Stream.map` in combination with `FutureValue.wrap`. Then `FutureValue.filter`, `FutureValue.map` and `FutureValue.flatMap` can be used any number of times before `Stream.collect` or `Stream.forEach` is called.
 
 For example:
 

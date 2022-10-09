@@ -146,9 +146,9 @@ class StreamUtilsTest {
         IllegalStateException exception = assertThrows(IllegalStateException.class, () -> stream.collect(collector));
         // ForkJoinTask may wrap the IllegalStateException in another IllegalStateException
         // If the message is not as expected, assert that its cause is
-        if (!exception.getMessage().equals(Messages.AdditionalCollectors.parallelStreamsNotSupported.get())) {
+        if (!exception.getMessage().equals(Messages.AdditionalCollectors.parallelStreamsNotSupported())) {
             assertInstanceOf(IllegalStateException.class, exception.getCause());
-            assertEquals(Messages.AdditionalCollectors.parallelStreamsNotSupported.get(), exception.getCause().getMessage());
+            assertEquals(Messages.AdditionalCollectors.parallelStreamsNotSupported(), exception.getCause().getMessage());
         }
     }
 }
