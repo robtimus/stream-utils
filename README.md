@@ -17,8 +17,9 @@ Class [AdditionalCollectors](https://robtimus.github.io/stream-utils/apidocs/com
 ### toMapWithSupplier
 `toMapWithSupplier` is like `Collectors.toMap`. However, unlike the version with only a key and value mapper, it allows you to provide a `Map` supplier. Unlike the version with a supplier there is no need to provide a merge function.
 
-### completableFutures
+### completionStages and completableFutures
 `completableFutures` can collect a stream of `CompletableFuture` elements into a combined `CompletableFuture`.
+`completionStages` is a more generic version of `completableFutures` that can collect a stream of `CompletionStage` elements. It can be used wherever `completableFutures` can be used.
 
 ### partitioning
 `partitioning` splits the stream into several partitions. Each partition is collected separately, and these partition results are then collected. For example, the following can be used to create a `List<List<T>>`, where each inner list has at most 10 elements:

@@ -42,10 +42,10 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * A class that allows filtering and mapping on {@link CompletableFuture} instances inside streams.
+ * A class that allows filtering and mapping on {@link CompletionStage} instances inside streams.
  * <p>
  * In streams, applying operations such as {@link Stream#filter(Predicate)} immediately alter the state of the streams. When using streams of
- * {@link CompletableFuture}, the result is not available when the stream operation is applied. This class is meant to help with that issue as far as
+ * {@link CompletionStage}, the result is not available when the stream operation is applied. This class is meant to help with that issue as far as
  * possible. It does so by providing the most essential functionality using asynchronous mapping:
  * <ul>
  * <li>Filtering values. However, because the actual filtering is done asynchronously, instead of using {@link Stream#filter(Predicate)},
@@ -56,10 +56,10 @@ import java.util.stream.Stream;
  * </ul>
  * <p>
  * Most other operations rely on the internal state of the stream to change. These operations should not be used after the first mapping to
- * {@link #wrap(CompletableFuture)}. The only stream operations that can safely be used are {@link Stream#map(Function)} (both for mapping and
- * filtering), {@link Stream#forEach(Consumer)} and {@link Stream#collect(Collector)}. For other methods, if possible, use
- * {@link Stream#collect(Collector)} as replacement. For instance, the following can be used as replacement for {@link Stream#reduce(BinaryOperator)}
- * using {@link Collectors#reducing(BinaryOperator)}:
+ * {@link #wrap(CompletionStage)} or {@link #wrap(CompletableFuture)}. The only stream operations that can safely be used are
+ * {@link Stream#map(Function)} (both for mapping and filtering), {@link Stream#forEach(Consumer)} and {@link Stream#collect(Collector)}. For other
+ * methods, if possible, use {@link Stream#collect(Collector)} as replacement. For instance, the following can be used as replacement for
+ * {@link Stream#reduce(BinaryOperator)} using {@link Collectors#reducing(BinaryOperator)}:
  * <pre><code>
  * CompletableFuture&lt;Optional&lt;Integer&gt;&gt; result = stream
  *         .map(FutureValue::wrap)
@@ -117,14 +117,27 @@ import java.util.stream.Stream;
  * </blockquote>
  *
  * @author Rob Spoor
- * @param <T> The type of {@link CompletableFuture} result.
+ * @param <T> The type of {@link CompletionStage} result.
  */
 public final class FutureValue<T> {
 
-    private final CompletableFuture<ValueHolder<T>> future;
+    private final CompletionStage<ValueHolder<T>> completionStage;
 
-    private FutureValue(CompletableFuture<ValueHolder<T>> future) {
-        this.future = future;
+    private FutureValue(CompletionStage<ValueHolder<T>> completionStage) {
+        this.completionStage = completionStage;
+    }
+
+    /**
+     * Wraps a {@link CompletionStage} in a {@code FutureValue}. This is usually used in {@link Stream#map(Function)} to start using this class.
+     *
+     * @param <T> The type of {@link CompletionStage} result.
+     * @param future The future to wrap.
+     * @return A {@code FutureValue} wrapping the given {@link CompletionStage}.
+     * @throws NullPointerException If the given {@link CompletionStage} is {@code null}.
+     * @since 1.1
+     */
+    public static <T> FutureValue<T> wrap(CompletionStage<T> future) {
+        return new FutureValue<>(future.thenApply(ValueHolder::new));
     }
 
     /**
@@ -136,64 +149,64 @@ public final class FutureValue<T> {
      * @throws NullPointerException If the given {@link CompletableFuture} is {@code null}.
      */
     public static <T> FutureValue<T> wrap(CompletableFuture<T> future) {
-        return new FutureValue<>(future.thenApply(ValueHolder::new));
+        return wrap((CompletionStage<T>) future);
     }
 
     /**
      * Returns a unary operator that applies filtering to a stream of {@code FutureValue}. However, because the actual filtering is done
      * asynchronously, this must be applied using {@link Stream#map(Function)} and not using {@link Stream#filter(Predicate)}.
      *
-     * @param <T> The type of {@link CompletableFuture} result.
+     * @param <T> The type of {@link CompletionStage} result.
      * @param predicate The predicate to apply.
      * @return A unary operator that applies filtering to a stream of {@code FutureValue}.
      * @throws NullPointerException If the given predicate is {@code null}.
      */
     public static <T> UnaryOperator<FutureValue<T>> filter(Predicate<? super T> predicate) {
         Objects.requireNonNull(predicate);
-        return value -> new FutureValue<>(value.future.thenApply(holder -> holder.filter(predicate)));
+        return value -> new FutureValue<>(value.completionStage.thenApply(holder -> holder.filter(predicate)));
     }
 
     /**
      * Returns a function that transforms one {@code FutureValue} instance into another. This is usually used in a call to
-     * {@link Stream#map(Function)} to transform {@link CompletableFuture} results.
+     * {@link Stream#map(Function)} to transform {@link CompletionStage} results.
      *
      * @param <T> The type of the input to the function.
      * @param <R> The type of the result of the function.
-     * @param mapper The function to apply to each {@link CompletableFuture} result.
+     * @param mapper The function to apply to each {@link CompletionStage} result.
      * @return A function that transforms one {@code FutureValue} instance into another
      * @throws NullPointerException If the given function is {@code null}.
      */
     public static <T, R> Function<FutureValue<T>, FutureValue<R>> map(Function<? super T, ? extends R> mapper) {
         Objects.requireNonNull(mapper);
-        return value -> new FutureValue<>(value.future.thenApply(holder -> holder.map(mapper)));
+        return value -> new FutureValue<>(value.completionStage.thenApply(holder -> holder.map(mapper)));
     }
 
     /**
      * Returns a function that transforms one {@link FutureValue} instance into another. This is usually used in a call to
-     * {@link Stream#map(Function)} to transform {@link CompletableFuture} results. Unlike {@link #map(Function)}, the result of the function must be
+     * {@link Stream#map(Function)} to transform {@link CompletionStage} results. Unlike {@link #map(Function)}, the result of the function must be
      * a {@link CompletionStage}, e.g. a {@link CompletableFuture}.
      *
      * @param <T> The type of the input to the function.
-     * @param <R> The type of the returned {@link CompletableFuture} result.
-     * @param mapper The function to apply to each {@link CompletableFuture} result.
+     * @param <R> The type of the returned {@link CompletionStage} result.
+     * @param mapper The function to apply to each {@link CompletionStage} result.
      * @return A function that transforms one {@code FutureValue} instance into another
      * @throws NullPointerException If the given function is {@code null}.
      * @since 1.1
      */
     public static <T, R> Function<FutureValue<T>, FutureValue<R>> flatMap(Function<? super T, ? extends CompletionStage<R>> mapper) {
         Objects.requireNonNull(mapper);
-        return value -> new FutureValue<>(value.future.thenCompose(holder -> holder.flatMap(mapper)));
+        return value -> new FutureValue<>(value.completionStage.thenCompose(holder -> holder.flatMap(mapper)));
     }
 
     /**
      * Returns a {@link Collector} that accumulates {@code FutureValue} instances into a {@link CompletableFuture}.
      * This method is similar to {@link AdditionalCollectors#completableFutures(Collector)}. That method can be used if no filtering or mapping is
-     * needed on the {@link CompletableFuture} results.
+     * needed on the {@link CompletionStage} results.
      *
-     * @param <T> The result type of the {@link CompletableFuture} instances.
+     * @param <T> The result type of the {@link CompletionStage} instances.
      * @param <A> The intermediate accumulation type of the {@link Collector}.
      * @param <R> The result type of the collected {@link CompletableFuture}.
-     * @param collector The collector for the {@link CompletableFuture} results.
+     * @param collector The collector for the {@link CompletionStage} results.
      * @return A {@link Collector} that collects {@code FutureValue} instances.
      * @throws NullPointerException If the given {@link Collector} is {@code null}.
      */
@@ -204,7 +217,7 @@ public final class FutureValue<T> {
             private CompletableFuture<ValueHolder<A>> result = CompletableFuture.completedFuture(new ValueHolder<>(collector.supplier().get()));
 
             private void accumulate(FutureValue<T> value) {
-                result = result.thenCombine(value.future, (a, t) -> {
+                result = result.thenCombine(value.completionStage, (a, t) -> {
                     if (!t.filtered) {
                         collector.accumulator().accept(a.value, t.value);
                     }
@@ -235,38 +248,38 @@ public final class FutureValue<T> {
      * or {@link Stream#forEachOrdered(Consumer)}.
      * <p>
      * Although this method can be used in a call to {@link Stream#peek(Consumer)}, the result is unpredictable due to the asynchronous nature of
-     * {@link CompletableFuture}s. The same goes for {@link Stream#forEachOrdered(Consumer)}.
+     * {@link CompletionStage}s. The same goes for {@link Stream#forEachOrdered(Consumer)}.
      *
-     * @param <T> The type of {@link CompletableFuture} result.
-     * @param action The action to perform for each {@link CompletableFuture} result. Note that the action is called asynchronously.
+     * @param <T> The type of {@link CompletionStage} result.
+     * @param action The action to perform for each {@link CompletionStage} result. Note that the action is called asynchronously.
      * @return A consumer that performs the given action on {@code FutureValue} instances asynchronously.
      * @throws NullPointerException If the given action is {@code null}.
      */
     public static <T> Consumer<FutureValue<T>> run(Consumer<? super T> action) {
         Objects.requireNonNull(action);
-        return value -> value.future.thenAccept(holder -> holder.run(action));
+        return value -> value.completionStage.thenAccept(holder -> holder.run(action));
     }
 
     /**
-     * Returns a {@link Collector} that returns any {@link CompletableFuture} result.
-     * To prevent waiting for more {@link CompletableFuture}s to finish than necessary, this method will create another {@link CompletableFuture}
+     * Returns a {@link Collector} that returns any {@link CompletionStage} result.
+     * To prevent waiting for more {@link CompletionStage}s to finish than necessary, this method will create another {@link CompletableFuture}
      * using the {@link ForkJoinPool#commonPool()}. This will return as value the first available result, or throw the first available error.
      *
-     * @param <T> The type of {@link CompletableFuture} result.
-     * @return A {@link Collector} that returns any {@link CompletableFuture} result.
+     * @param <T> The type of {@link CompletionStage} result.
+     * @return A {@link Collector} that returns any {@link CompletionStage} result.
      */
     public static <T> Collector<FutureValue<T>, ?, CompletableFuture<Optional<T>>> findAny() {
         return findAny(CompletableFuture::supplyAsync);
     }
 
     /**
-     * Returns a {@link Collector} that returns any {@link CompletableFuture} result.
-     * To prevent waiting for more {@link CompletableFuture}s to finish than necessary, this method will create another {@link CompletableFuture}.
+     * Returns a {@link Collector} that returns any {@link CompletionStage} result.
+     * To prevent waiting for more {@link CompletionStage}s to finish than necessary, this method will create another {@link CompletableFuture}.
      * This will return as value the first available result, or throw the first available error.
      *
-     * @param <T> The type of {@link CompletableFuture} result.
+     * @param <T> The type of {@link CompletionStage} result.
      * @param executor The executor service to use for creating the new {@link CompletableFuture}.
-     * @return A {@link Collector} that returns any {@link CompletableFuture} result.
+     * @return A {@link Collector} that returns any {@link CompletionStage} result.
      * @throws NullPointerException If the given executor service is {@code null}.
      */
     public static <T> Collector<FutureValue<T>, ?, CompletableFuture<Optional<T>>> findAny(ExecutorService executor) {
@@ -296,7 +309,7 @@ public final class FutureValue<T> {
 
             private void accumulate(FutureValue<T> value) {
                 totalCount.incrementAndGet();
-                value.future.handle((v, e) -> {
+                value.completionStage.handle((v, e) -> {
                     lock.lock();
                     try {
                         if (e == null && !v.filtered) {

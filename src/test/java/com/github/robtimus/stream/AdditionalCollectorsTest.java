@@ -18,6 +18,7 @@
 package com.github.robtimus.stream;
 
 import static com.github.robtimus.stream.AdditionalCollectors.completableFutures;
+import static com.github.robtimus.stream.AdditionalCollectors.completionStages;
 import static com.github.robtimus.stream.AdditionalCollectors.findSingle;
 import static com.github.robtimus.stream.AdditionalCollectors.findUnique;
 import static com.github.robtimus.stream.AdditionalCollectors.partitioning;
@@ -571,6 +572,80 @@ class AdditionalCollectorsTest {
             Function<Integer, Integer> keyMapper = Function.identity();
             Function<Integer, Integer> valueMapper = Function.identity();
             assertThrows(NullPointerException.class, () -> toMapWithSupplier(keyMapper, valueMapper, null));
+        }
+    }
+
+    @Nested
+    @DisplayName("completionStages")
+    class CompletionStages {
+
+        private int threadPoolSize = 5;
+
+        private ExecutorService executor;
+
+        @BeforeEach
+        void setupExecutor() {
+            executor = Executors.newFixedThreadPool(threadPoolSize);
+        }
+
+        @AfterEach
+        void shutdownExecutor() {
+            executor.shutdown();
+        }
+
+        @Test
+        @DisplayName("collect sequential")
+        void testCollectSequential() {
+            int size = 2 * threadPoolSize;
+
+            CompletableFuture<List<Integer>> result = IntStream.range(0, size)
+                    .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                    .collect(completionStages(toList()));
+
+            List<Integer> expected = IntStream.range(0, size)
+                    .map(i -> i * i)
+                    .boxed()
+                    .collect(toList());
+
+            List<Integer> resultList = assertDoesNotThrow(() -> result.get(10, TimeUnit.SECONDS));
+
+            assertEquals(expected, resultList);
+        }
+
+        @Test
+        @DisplayName("collect parallel")
+        void testCollectParallel() {
+            int size = 2 * threadPoolSize;
+
+            CompletableFuture<List<Integer>> result = IntStream.range(0, size)
+                    .parallel()
+                    .mapToObj(i -> CompletableFuture.supplyAsync(() -> calculate(i), executor))
+                    .collect(completionStages(toList()));
+
+            List<Integer> expected = IntStream.range(0, size)
+                    .map(i -> i * i)
+                    .boxed()
+                    .collect(toList());
+
+            List<Integer> resultList = assertDoesNotThrow(() -> result.get(10, TimeUnit.SECONDS));
+
+            assertEquals(expected, resultList);
+        }
+
+        private int calculate(int i) {
+            try {
+                Thread.sleep(10 * i);
+                return i * i;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            }
+        }
+
+        @Test
+        @DisplayName("with null collector")
+        void testNullCollector() {
+            assertThrows(NullPointerException.class, () -> completionStages(null));
         }
     }
 

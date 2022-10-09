@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.function.BiConsumer;
 import java.util.function.BinaryOperator;
 import java.util.function.Function;
@@ -254,24 +255,25 @@ public final class AdditionalCollectors {
     }
 
     /**
-     * Returns a {@link Collector} that accumulates {@link CompletableFuture} instances into a new {@link CompletableFuture}.
-     * If the {@link CompletableFuture} results need to be mapped or filtered before collecting, use {@link FutureValue} instead.
+     * Returns a {@link Collector} that accumulates {@link CompletionStage} instances into a new {@link CompletableFuture}.
+     * If the {@link CompletionStage} results need to be mapped or filtered before collecting, use {@link FutureValue} instead.
      *
-     * @param <T> The result type of the {@link CompletableFuture} instances.
+     * @param <T> The result type of the {@link CompletionStage} instances.
      * @param <A> The intermediate accumulation type of the {@link Collector}.
      * @param <R> The result type of the collected {@link CompletableFuture}.
-     * @param collector The collector for the {@link CompletableFuture} results.
-     * @return A {@link Collector} that collects {@link CompletableFuture} instances.
+     * @param collector The collector for the {@link CompletionStage} results.
+     * @return A {@link Collector} that collects {@link CompletionStage} instances.
      * @throws NullPointerException If the given {@link Collector} is {@code null}.
+     * @since 1.1
      */
-    public static <T, A, R> Collector<CompletableFuture<T>, ?, CompletableFuture<R>> completableFutures(Collector<T, A, R> collector) {
+    public static <T, A, R> Collector<CompletionStage<T>, ?, CompletableFuture<R>> completionStages(Collector<T, A, R> collector) {
         Objects.requireNonNull(collector);
 
         final class CompletableFutureCollector {
             private CompletableFuture<A> result = CompletableFuture.completedFuture(collector.supplier().get());
 
-            private void accumulate(CompletableFuture<T> future) {
-                result = result.thenCombine(future, (a, t) -> {
+            private void accumulate(CompletionStage<T> completionStage) {
+                result = result.thenCombine(completionStage, (a, t) -> {
                     collector.accumulator().accept(a, t);
                     return a;
                 });
@@ -293,6 +295,23 @@ public final class AdditionalCollectors {
                 CompletableFutureCollector::combine,
                 CompletableFutureCollector::finish
         );
+    }
+
+    /**
+     * Returns a {@link Collector} that accumulates {@link CompletableFuture} instances into a new {@link CompletableFuture}.
+     * If the {@link CompletableFuture} results need to be mapped or filtered before collecting, use {@link FutureValue} instead.
+     *
+     * @param <T> The result type of the {@link CompletableFuture} instances.
+     * @param <A> The intermediate accumulation type of the {@link Collector}.
+     * @param <R> The result type of the collected {@link CompletableFuture}.
+     * @param collector The collector for the {@link CompletableFuture} results.
+     * @return A {@link Collector} that collects {@link CompletableFuture} instances.
+     * @throws NullPointerException If the given {@link Collector} is {@code null}.
+     */
+    @SuppressWarnings("unchecked")
+    public static <T, A, R> Collector<CompletableFuture<T>, ?, CompletableFuture<R>> completableFutures(Collector<T, A, R> collector) {
+        // THe collector returned by completionStages accepts CompletionStage<T>, so it also accepts CompletableFuture<T>
+        return (Collector<CompletableFuture<T>, ?, CompletableFuture<R>>) (Collector<?, ?, ?>) completionStages(collector);
     }
 
     /**
