@@ -29,7 +29,9 @@ Class [AdditionalCollectors](https://robtimus.github.io/stream-utils/apidocs/com
 ### partitioning
 `partitioning` splits the stream into several partitions. Each partition is collected separately, and these partition results are then collected. For example, the following can be used to create a `List<List<T>>`, where each inner list has at most 10 elements:
 
-    stream.collect(partitioning(10, toList(), toList())
+```java
+stream.collect(partitioning(10, toList(), toList())
+```
 
 Because it's hard to get predictable results for parallel streams, this collector will throw an exception when used to collect parallel streams.
 
@@ -41,7 +43,9 @@ Class [StreamUtils](https://robtimus.github.io/stream-utils/apidocs/com/github/r
 
 `forEvery` is like `AdditionalCollectors.partitioning` (see above), but runs an action for each partition result instead of collecting them. For example, to print 10 elements per line:
 
-    forEvery(10, stream, joining(", "), System.out::println);
+```java
+forEvery(10, stream, joining(", "), System.out::println);
+```
 
 Like `AdditionalCollectors.partitioning`, this method will throw an exception when used to collect parallel streams.
 
@@ -53,8 +57,10 @@ To use this class, use `Stream.map` in combination with `FutureValue.wrap`. Then
 
 For example:
 
-    // assume stream is an existing Stream<CompletableFuture<T>>
-    CompletableFuture<List<T>> list = stream
-            .map(FutureValue::wrap)
-            .map(FutureValue.filter(Objects::nonNull))
-            .collect(FutureValue.collect(toList()));
+```java
+// assume stream is an existing Stream<CompletableFuture<T>>
+CompletableFuture<List<T>> list = stream
+        .map(FutureValue::wrap)
+        .map(FutureValue.filter(Objects::nonNull))
+        .collect(FutureValue.collect(toList()));
+```
