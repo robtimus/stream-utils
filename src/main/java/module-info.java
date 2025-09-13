@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+/**
+ * Provides utility classes for working with streams.
+ */
 module com.github.robtimus.stream {
     exports com.github.robtimus.stream;
 }

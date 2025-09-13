@@ -69,7 +69,7 @@ import java.util.stream.Stream;
  * <p>
  * The following is a list of stream operations and their possible {@link Collector} replacements:
  * <blockquote>
- * <table border="0" cellspacing="3" cellpadding="0">
+ * <table class="striped">
  *   <caption style="display:none">Stream operations</caption>
  *   <thead>
  *     <tr>
