@@ -75,7 +75,7 @@ class AdditionalCollectorsTest {
             void testSequential() {
                 int count = 50;
 
-                Collector<Integer, ?, List<Integer>> collector = sequentialOnly(ArrayList::new, (list, element) -> list.add(element));
+                Collector<Integer, ?, List<Integer>> collector = sequentialOnly(ArrayList::new, List::add);
                 List<Integer> result = IntStream.range(0, count)
                         .map(i -> i * i)
                         .boxed()
@@ -94,7 +94,7 @@ class AdditionalCollectorsTest {
             void testParallel() {
                 int count = 50;
 
-                Collector<Integer, ?, List<Integer>> collector = sequentialOnly(ArrayList::new, (list, element) -> list.add(element));
+                Collector<Integer, ?, List<Integer>> collector = sequentialOnly(ArrayList::new, List::add);
                 Stream<Integer> stream = IntStream.range(0, count)
                         .map(i -> i * i)
                         .boxed()
@@ -113,7 +113,7 @@ class AdditionalCollectorsTest {
             void testSequential() {
                 int count = 50;
 
-                Collector<Integer, ?, Integer> collector = sequentialOnly(ArrayList::new, (list, element) -> list.add(element), this::sum);
+                Collector<Integer, ?, Integer> collector = sequentialOnly(ArrayList::new, List::add, this::sum);
                 int result = IntStream.range(0, count)
                         .map(i -> i * i)
                         .boxed()
@@ -131,7 +131,7 @@ class AdditionalCollectorsTest {
             void testParallel() {
                 int count = 50;
 
-                Collector<Integer, ?, Integer> collector = sequentialOnly(ArrayList::new, (list, element) -> list.add(element), this::sum);
+                Collector<Integer, ?, Integer> collector = sequentialOnly(ArrayList::new, List::add, this::sum);
                 Stream<Integer> stream = IntStream.range(0, count)
                         .map(i -> i * i)
                         .boxed()
