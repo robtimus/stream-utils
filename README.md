@@ -3,7 +3,6 @@
 [![Build Status](https://github.com/robtimus/stream-utils/actions/workflows/build.yml/badge.svg)](https://github.com/robtimus/stream-utils/actions/workflows/build.yml)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=com.github.robtimus%3Astream-utils&metric=alert_status)](https://sonarcloud.io/summary/overall?id=com.github.robtimus%3Astream-utils)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=com.github.robtimus%3Astream-utils&metric=coverage)](https://sonarcloud.io/summary/overall?id=com.github.robtimus%3Astream-utils)
-[![Known Vulnerabilities](https://snyk.io/test/github/robtimus/stream-utils/badge.svg)](https://snyk.io/test/github/robtimus/stream-utils)
 
 Provides utility classes for working with streams.
 
